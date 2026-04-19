@@ -1,0 +1,168 @@
+package ui.teacher;
+
+import ui.LoginFrame;
+import model.User;
+import javax.swing.*;
+import javax.swing.border.EmptyBorder;
+import java.awt.*;
+
+public class TeacherDashboard extends JFrame {
+
+    private CardLayout cardLayout;
+    private JPanel mainContentPanel;
+    private JPanel sidebarPanel;
+
+    private Color brandColor = new Color(250, 100, 100); // Teacher Red
+    private Color sidebarBg = Color.WHITE;
+    private Color bgLight = new Color(245, 247, 250);
+    
+    private User teacherContext;
+
+    public TeacherDashboard(User user) {
+        this.teacherContext = user;
+        
+        setTitle("MRK Tuition - Teacher Workspace");
+        setSize(1300, 800);
+        setLocationRelativeTo(null);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new BorderLayout());
+        getContentPane().setBackground(bgLight);
+
+        cardLayout = new CardLayout();
+        mainContentPanel = new JPanel(cardLayout);
+        mainContentPanel.setBackground(bgLight);
+
+        // Sub-panels initialized passing the teacher object token
+        mainContentPanel.add(new OverviewPanel(teacherContext), "Dashboard");
+        mainContentPanel.add(new MyBatchesPanel(teacherContext), "My Batches");
+        mainContentPanel.add(new AttendanceModulePanel(teacherContext), "Take Attendance");
+        mainContentPanel.add(new TestsMarksPanel(teacherContext), "Tests & Marks");
+        mainContentPanel.add(new SyllabusUpdatePanel(teacherContext), "Syllabus Progress");
+        mainContentPanel.add(new StudentsListPanel(teacherContext), "My Students");
+        mainContentPanel.add(new ProfilePanel(teacherContext), "Profile");
+
+        add(createTopNavbar(), BorderLayout.NORTH);
+        add(createSidebar(), BorderLayout.WEST);
+        add(mainContentPanel, BorderLayout.CENTER);
+    }
+
+    private JPanel createTopNavbar() {
+        JPanel topPanel = new JPanel(new BorderLayout());
+        topPanel.setBackground(Color.WHITE);
+        topPanel.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(230,230,230)));
+
+        JPanel logoPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 20, 15));
+        logoPanel.setBackground(Color.WHITE);
+        JLabel logoIcon = new JLabel("T"); 
+        logoIcon.setOpaque(true);
+        logoIcon.setBackground(brandColor);
+        logoIcon.setForeground(Color.WHITE);
+        logoIcon.setFont(new Font("Arial", Font.BOLD, 20));
+        logoIcon.setBorder(new EmptyBorder(5, 10, 5, 10));
+
+        JLabel logoText = new JLabel("MRK Tuition Teacher Workspace");
+        logoText.setFont(new Font("Serif", Font.BOLD, 24));
+        
+        logoPanel.add(logoIcon);
+        logoPanel.add(logoText);
+
+        JPanel userPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 20, 15));
+        userPanel.setBackground(Color.WHITE);
+        
+        JButton profileBtn = new JButton("🏫 " + (teacherContext.getName() != null ? teacherContext.getName() : "Teacher") + " ▾");
+        profileBtn.setBackground(new Color(245, 245, 245));
+        profileBtn.setForeground(Color.DARK_GRAY);
+        profileBtn.setFont(new Font("Arial", Font.BOLD, 14));
+        profileBtn.setFocusPainted(false);
+        profileBtn.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(220, 220, 220), 1, true),
+            BorderFactory.createEmptyBorder(8, 15, 8, 15)
+        ));
+        profileBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        
+        JPopupMenu popupMenu = new JPopupMenu();
+        popupMenu.setBackground(Color.WHITE);
+        
+        JMenuItem profileItem = new JMenuItem("  My Profile  ");
+        profileItem.setBackground(Color.WHITE);
+        profileItem.addActionListener(e -> {
+            cardLayout.show(mainContentPanel, "Profile");
+        });
+        
+        JMenuItem logoutItem = new JMenuItem("  Logout  ");
+        logoutItem.setBackground(Color.WHITE);
+        logoutItem.setForeground(new Color(220, 50, 50));
+        logoutItem.addActionListener(e -> {
+            dispose();
+            new LoginFrame().setVisible(true);
+        });
+        
+        popupMenu.add(profileItem);
+        popupMenu.addSeparator();
+        popupMenu.add(logoutItem);
+        
+        profileBtn.addActionListener(e -> popupMenu.show(profileBtn, 0, profileBtn.getHeight()));
+
+        userPanel.add(profileBtn);
+
+        topPanel.add(logoPanel, BorderLayout.WEST);
+        topPanel.add(userPanel, BorderLayout.EAST);
+
+        return topPanel;
+    }
+
+    private JPanel createSidebar() {
+        sidebarPanel = new JPanel();
+        sidebarPanel.setLayout(new BoxLayout(sidebarPanel, BoxLayout.Y_AXIS));
+        sidebarPanel.setPreferredSize(new Dimension(230, 0));
+        sidebarPanel.setBackground(sidebarBg);
+        sidebarPanel.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, new Color(230,230,230)));
+
+        JLabel menuLabel = new JLabel("TEACHER OPERATIONS");
+        menuLabel.setFont(new Font("Arial", Font.BOLD, 11));
+        menuLabel.setForeground(Color.GRAY);
+        menuLabel.setBorder(new EmptyBorder(20, 20, 10, 0));
+        menuLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        sidebarPanel.add(menuLabel);
+
+        String[] menuItems = {
+            "Dashboard", "My Batches", "Take Attendance", "Tests & Marks", 
+            "Syllabus Progress", "My Students", "Profile"
+        };
+
+        for (String item : menuItems) {
+            JButton btn = new JButton(" " + item);
+            btn.setAlignmentX(Component.LEFT_ALIGNMENT);
+            btn.setMaximumSize(new Dimension(210, 45));
+            btn.setBackground(sidebarBg);
+            btn.setForeground(Color.DARK_GRAY);
+            btn.setFont(new Font("Arial", Font.BOLD, 14));
+            btn.setFocusPainted(false);
+            btn.setBorderPainted(false);
+            btn.setHorizontalAlignment(SwingConstants.LEFT);
+            btn.setBorder(new EmptyBorder(10, 20, 10, 20));
+            btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+
+            btn.addActionListener(e -> {
+                for (Component comp : sidebarPanel.getComponents()) {
+                    if (comp instanceof JButton) {
+                        comp.setBackground(sidebarBg);
+                        ((JButton)comp).setForeground(Color.DARK_GRAY);
+                    }
+                }
+                btn.setBackground(new Color(255, 240, 240));
+                btn.setForeground(brandColor);
+                cardLayout.show(mainContentPanel, item);
+            });
+            sidebarPanel.add(btn);
+        }
+        
+        Component firstBtn = sidebarPanel.getComponent(1);
+        if(firstBtn instanceof JButton) {
+            firstBtn.setBackground(new Color(255, 240, 240));
+            ((JButton)firstBtn).setForeground(brandColor);
+        }
+
+        return sidebarPanel;
+    }
+}

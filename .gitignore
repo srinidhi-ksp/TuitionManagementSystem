@@ -1,0 +1,26 @@
+# Build output
+target/
+bin/
+
+# Compiled class files
+*.class
+
+# Log files
+*.log
+
+# IDE specific files
+.settings/
+.vscode/
+.idea/
+*.iml
+.project
+.classpath
+
+# Maven wrapper (optional - keep if using mvnw)
+# !.mvn/
+# !mvnw
+# !mvnw.cmd
+
+# OS generated files
+.DS_Store
+Thumbs.db

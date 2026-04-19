@@ -1,0 +1,55 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" 
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.tutionms</groupId>
+    <artifactId>TutionManagementSystem</artifactId>
+    <version>1.0</version>
+    <packaging>jar</packaging>
+    
+    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencies>
+        <!-- MongoDB Driver Sync — local JAR -->
+        <dependency>
+            <groupId>org.mongodb</groupId>
+            <artifactId>mongodb-driver-sync</artifactId>
+            <version>4.11.1</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/lib/mongodb-driver-sync-4.11.1.jar</systemPath>
+        </dependency>
+        <!-- MongoDB Driver Core — local JAR -->
+        <dependency>
+            <groupId>org.mongodb</groupId>
+            <artifactId>mongodb-driver-core</artifactId>
+            <version>4.11.1</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/lib/mongodb-driver-core-4.11.1.jar</systemPath>
+        </dependency>
+        <!-- BSON — local JAR -->
+        <dependency>
+            <groupId>org.mongodb</groupId>
+            <artifactId>bson</artifactId>
+            <version>4.11.1</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/lib/bson-4.11.1.jar</systemPath>
+        </dependency>
+        <!-- BSON Record Codec — local JAR -->
+        <dependency>
+            <groupId>org.mongodb</groupId>
+            <artifactId>bson-record-codec</artifactId>
+            <version>4.11.1</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/lib/bson-record-codec-4.11.1.jar</systemPath>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <sourceDirectory>src</sourceDirectory>
+        <outputDirectory>bin</outputDirectory>
+    </build>
+</project>
