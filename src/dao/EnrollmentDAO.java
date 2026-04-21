@@ -69,7 +69,13 @@ public class EnrollmentDAO {
         if (enrollmentCollection == null) return batches;
         
         BatchDAO batchDao = new BatchDAO();
-        try (MongoCursor<Document> cursor = enrollmentCollection.find(Filters.eq("student_user_id", studentId)).iterator()) {
+        try (MongoCursor<Document> cursor = enrollmentCollection.find(
+                Filters.or(
+                    Filters.eq("student_user_id", studentId),
+                    Filters.eq("student_id", studentId),
+                    Filters.eq("user_id", studentId)
+                )
+            ).iterator()) {
             while (cursor.hasNext()) {
                 Document doc = cursor.next();
                 Enrollment e = DocumentMapper.documentToEnrollment(doc);
