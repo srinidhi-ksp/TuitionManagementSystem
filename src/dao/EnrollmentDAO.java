@@ -86,6 +86,21 @@ public class EnrollmentDAO {
         return batches;
     }
 
+    public List<String> getStudentIdsByBatchId(int batchId) {
+        List<String> ids = new ArrayList<>();
+        if (enrollmentCollection == null) return ids;
+        try (MongoCursor<Document> cursor = enrollmentCollection.find(Filters.eq("batch_id", batchId)).iterator()) {
+            while (cursor.hasNext()) {
+                Document doc = cursor.next();
+                String sId = doc.getString("student_user_id");
+                if (sId != null) ids.add(sId);
+            }
+        } catch(Exception e) {
+            e.printStackTrace();
+        }
+        return ids;
+    }
+
     public boolean deleteEnrollment(int enrollmentId) {
         if (enrollmentCollection == null) return false;
         try {
@@ -93,6 +108,18 @@ public class EnrollmentDAO {
             return deletedCount > 0;
         } catch (Exception ex) {
             ex.printStackTrace();
+        }
+        return false;
+    }
+
+    public boolean updateEnrollment(Enrollment enrollment) {
+        if (enrollmentCollection == null) return false;
+        try {
+            Document doc = DocumentMapper.enrollmentToDocument(enrollment);
+            long matched = enrollmentCollection.replaceOne(Filters.eq("_id", enrollment.getEnrollmentId()), doc).getMatchedCount();
+            return matched > 0;
+        } catch (Exception e) {
+            e.printStackTrace();
         }
         return false;
     }

@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-cd /d c:\Users\srini\Documents\workspace\tutionms
+cd /d c:\Users\srini\Documents\workspace\tutionms\clean-project
 setlocal enabledelayedexpansion
 
 set "CLASSPATH=lib\*"
@@ -13,6 +13,7 @@ javac -encoding UTF-8 -source 17 -target 17 -d bin -cp "%CLASSPATH%" ^
   src\db\*.java ^
   src\model\*.java ^
   src\service\*.java ^
+  src\util\*.java ^
   src\ui\*.java ^
   src\ui\admin\*.java ^
   src\ui\student\*.java ^

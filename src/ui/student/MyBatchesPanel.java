@@ -6,22 +6,20 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.util.List;
 
-import model.User;
 import model.Batch;
 import dao.EnrollmentDAO;
 import dao.SubjectDAO;
+import util.SessionManager;
 import ui.admin.TableActionCellRender;
 import ui.admin.TableActionCellEditor;
 import ui.admin.TableActionEvent;
 
 public class MyBatchesPanel extends JPanel {
 
-    private User student;
     private JTable batchTable;
     private DefaultTableModel model;
 
-    public MyBatchesPanel(User user) {
-        this.student = user;
+    public MyBatchesPanel() {
         setLayout(new BorderLayout());
         setBackground(Color.WHITE);
         setBorder(new EmptyBorder(30, 40, 30, 40));
@@ -45,7 +43,7 @@ public class MyBatchesPanel extends JPanel {
         batchTable.setShowHorizontalLines(true);
         batchTable.setGridColor(new Color(230, 230, 230));
 
-        refreshTable();
+        loadBatchesAsync();
 
         JScrollPane scrollPane = new JScrollPane(batchTable);
         scrollPane.setBorder(BorderFactory.createLineBorder(new Color(230,230,230)));
@@ -53,24 +51,54 @@ public class MyBatchesPanel extends JPanel {
         add(scrollPane, BorderLayout.CENTER);
     }
 
-    private void refreshTable() {
+    private void loadBatchesAsync() {
         model.setRowCount(0);
-        List<Batch> enrolled = new EnrollmentDAO().getBatchesByStudentId(student.getUserId());
-        SubjectDAO subDao = new SubjectDAO();
+        model.addRow(new Object[]{"Loading...", "", "", "", "", ""});
+        
+        new SwingWorker<List<Object[]>, Void>() {
+            @Override
+            protected List<Object[]> doInBackground() throws Exception {
+                String userId = SessionManager.getInstance().getUserId();
+                List<Object[]> rows = new java.util.ArrayList<>();
+                if (userId == null) return rows;
 
-        if (enrolled != null) {
-            for (Batch b : enrolled) {
-                String subName = "Unknown";
-                if (subDao.getSubjectById(b.getSubjectId()) != null) {
-                    subName = subDao.getSubjectById(b.getSubjectId()).getSubjectName();
+                List<Batch> enrolled = new EnrollmentDAO().getBatchesByStudentId(userId);
+                SubjectDAO subDao = new SubjectDAO();
+
+                if (enrolled != null) {
+                    for (Batch b : enrolled) {
+                        String subName = "Unknown";
+                        if (subDao.getSubjectById(b.getSubjectId()) != null) {
+                            subName = subDao.getSubjectById(b.getSubjectId()).getSubjectName();
+                        }
+                        String start = b.getStartTime() != null ? b.getStartTime().toString().substring(11,16) : "";
+                        String end = b.getEndTime() != null ? b.getEndTime().toString().substring(11,16) : "";
+                        rows.add(new Object[]{
+                            b.getBatchName(), subName, b.getTeacherUserId(), start + " - " + end, b.getClassMode(), "Active"
+                        });
+                    }
                 }
-                String start = b.getStartTime() != null ? b.getStartTime().toString().substring(11,16) : "";
-                String end = b.getEndTime() != null ? b.getEndTime().toString().substring(11,16) : "";
-                
-                model.addRow(new Object[]{
-                    b.getBatchName(), subName, b.getTeacherUserId(), start + " - " + end, b.getClassMode(), "Active"
-                });
+                return rows;
             }
-        }
+
+            @Override
+            protected void done() {
+                try {
+                    List<Object[]> rows = get();
+                    model.setRowCount(0);
+                    if (!rows.isEmpty()) {
+                        for (Object[] row : rows) {
+                            model.addRow(row);
+                        }
+                    } else {
+                        model.addRow(new Object[]{"No Data Available", "", "", "", "", ""});
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    model.setRowCount(0);
+                    model.addRow(new Object[]{"Error loading data", "", "", "", "", ""});
+                }
+            }
+        }.execute();
     }
 }

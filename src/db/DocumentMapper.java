@@ -68,6 +68,7 @@ public class DocumentMapper {
         s.setName(doc.getString("full_name"));
         s.setDob(doc.getDate("dob"));
         s.setEmail(doc.getString("email"));
+        s.setPhone(doc.getString("phone"));
 
         // join_date from DB (null if not stored — caller will use users.created_at)
         s.setJoinDate(doc.getDate("join_date"));
@@ -126,7 +127,8 @@ public class DocumentMapper {
         // keep legacy address field populated for backward compat
         if (student.getCity() != null) doc.append("address", student.getCity());
 
-        doc.append("phone", "9999999999");
+        if (student.getPhone() != null) doc.append("phone", student.getPhone());
+        else doc.append("phone", "9999999999"); // Fallback for data integrity
 
         if (student.getParent() != null) {
             Parent p = student.getParent();
@@ -151,6 +153,7 @@ public class DocumentMapper {
         t.setName(doc.getString("full_name"));
         // ✅ CRITICAL: read email so getCreatedAtByEmail() can look up users.created_at
         t.setEmail(doc.getString("email"));
+        t.setPhone(doc.getString("phone"));
         t.setSpecialization(doc.getString("specialization"));
         t.setRole(doc.getString("status")); // Usually status ACTIVE, or role
 
@@ -191,7 +194,7 @@ public class DocumentMapper {
 
         doc.append("full_name",      teacher.getName());
         doc.append("specialization", teacher.getSpecialization());
-        doc.append("phone",          "9999999999");
+        doc.append("phone",          teacher.getPhone() != null ? teacher.getPhone() : "9999999999");
         doc.append("status",         "ACTIVE");
 
         // Persist city, street, join_date to DB

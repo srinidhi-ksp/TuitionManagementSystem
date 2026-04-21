@@ -7,16 +7,15 @@ import java.util.List;
 import java.util.HashMap;
 import java.util.ArrayList;
 
-import model.User;
 import model.ChapterProgress;
 import dao.SyllabusProgressDAO;
+import util.SessionManager;
 
 public class SyllabusProgressPanel extends JPanel {
 
-    private User student;
+    private JPanel content;
 
-    public SyllabusProgressPanel(User user) {
-        this.student = user;
+    public SyllabusProgressPanel() {
         setLayout(new BorderLayout());
         setBackground(Color.WHITE);
         setBorder(new EmptyBorder(30, 40, 30, 40));
@@ -31,49 +30,11 @@ public class SyllabusProgressPanel extends JPanel {
         header.add(title, BorderLayout.WEST);
         add(header, BorderLayout.NORTH);
 
-        JPanel content = new JPanel();
+        content = new JPanel();
         content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
         content.setBackground(Color.WHITE);
 
-        List<ChapterProgress> progressList = new SyllabusProgressDAO().getProgressForStudent(student.getUserId());
-        
-        if(progressList == null || progressList.isEmpty()) {
-            JLabel empty = new JLabel("No syllabus progress data available. (Mock/Database tables may be empty)");
-            empty.setForeground(Color.GRAY);
-            content.add(empty);
-        } else {
-            // Group by Subject
-            HashMap<String, List<ChapterProgress>> grouped = new HashMap<>();
-            for(ChapterProgress cp : progressList) {
-                grouped.putIfAbsent(cp.getSubjectName(), new ArrayList<>());
-                grouped.get(cp.getSubjectName()).add(cp);
-            }
-            
-            for (String subName : grouped.keySet()) {
-                JPanel subBlock = new JPanel(new BorderLayout());
-                subBlock.setBackground(Color.WHITE);
-                subBlock.setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createLineBorder(new Color(230,230,230)),
-                    new EmptyBorder(10,10,10,10)
-                ));
-                
-                JLabel stitle = new JLabel("📚 " + subName);
-                stitle.setFont(new Font("Arial", Font.BOLD, 16));
-                subBlock.add(stitle, BorderLayout.NORTH);
-                
-                JPanel chapList = new JPanel(new GridLayout(0, 1, 0, 10));
-                chapList.setBackground(Color.WHITE);
-                chapList.setBorder(new EmptyBorder(10,0,0,0));
-                
-                for(ChapterProgress cp : grouped.get(subName)) {
-                    chapList.add(createChapterRow(cp));
-                }
-                
-                subBlock.add(chapList, BorderLayout.CENTER);
-                content.add(subBlock);
-                content.add(Box.createRigidArea(new Dimension(0, 20)));
-            }
-        }
+        loadProgressAsync();
 
         JScrollPane scrollPane = new JScrollPane(content);
         scrollPane.setBorder(null);
@@ -106,5 +67,71 @@ public class SyllabusProgressPanel extends JPanel {
         row.add(right, BorderLayout.EAST);
         
         return row;
+    }
+
+    private void loadProgressAsync() {
+        content.removeAll();
+        content.add(new JLabel("Loading syllabus progress..."));
+
+        new SwingWorker<List<ChapterProgress>, Void>() {
+            @Override
+            protected List<ChapterProgress> doInBackground() throws Exception {
+                String userId = SessionManager.getInstance().getUserId();
+                if (userId == null) return new ArrayList<>();
+                return new SyllabusProgressDAO().getProgressForStudent(userId);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    List<ChapterProgress> progressList = get();
+                    content.removeAll();
+                    if(progressList == null || progressList.isEmpty()) {
+                        JLabel empty = new JLabel("No syllabus progress data available. (Database tables may be empty)");
+                        empty.setForeground(Color.GRAY);
+                        content.add(empty);
+                    } else {
+                        // Group by Subject
+                        HashMap<String, List<ChapterProgress>> grouped = new HashMap<>();
+                        for(ChapterProgress cp : progressList) {
+                            grouped.putIfAbsent(cp.getSubjectName(), new ArrayList<>());
+                            grouped.get(cp.getSubjectName()).add(cp);
+                        }
+                        
+                        for (String subName : grouped.keySet()) {
+                            JPanel subBlock = new JPanel(new BorderLayout());
+                            subBlock.setBackground(Color.WHITE);
+                            subBlock.setBorder(BorderFactory.createCompoundBorder(
+                                BorderFactory.createLineBorder(new Color(230,230,230)),
+                                new EmptyBorder(10,10,10,10)
+                            ));
+                            
+                            JLabel stitle = new JLabel("📚 " + subName);
+                            stitle.setFont(new Font("Arial", Font.BOLD, 16));
+                            subBlock.add(stitle, BorderLayout.NORTH);
+                            
+                            JPanel chapList = new JPanel(new GridLayout(0, 1, 0, 10));
+                            chapList.setBackground(Color.WHITE);
+                            chapList.setBorder(new EmptyBorder(10,0,0,0));
+                            
+                            for(ChapterProgress cp : grouped.get(subName)) {
+                                chapList.add(createChapterRow(cp));
+                            }
+                            
+                            subBlock.add(chapList, BorderLayout.CENTER);
+                            content.add(subBlock);
+                            content.add(Box.createRigidArea(new Dimension(0, 20)));
+                        }
+                    }
+                    content.revalidate();
+                    content.repaint();
+                } catch (Exception e) {
+                    content.removeAll();
+                    content.add(new JLabel("Error loading data."));
+                    content.revalidate();
+                    content.repaint();
+                }
+            }
+        }.execute();
     }
 }

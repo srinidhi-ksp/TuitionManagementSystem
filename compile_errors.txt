@@ -1,0 +1,142 @@
+src\ui\LoginFrame.java:283: error: cannot find symbol
+            String userName = user.getName() != null ? user.getName() : user.getUsername();
+                                                                            ^
+  symbol:   method getUsername()
+  location: variable user of type User
+src\ui\student\AttendancePanel.java:31: error: cannot find symbol
+        model = new DefaultTableModel(columns, 0);
+        ^
+  symbol:   variable model
+  location: class AttendancePanel
+src\ui\student\AttendancePanel.java:32: error: cannot find symbol
+        attTable = new JTable(model);
+        ^
+  symbol:   variable attTable
+  location: class AttendancePanel
+src\ui\student\AttendancePanel.java:32: error: cannot find symbol
+        attTable = new JTable(model);
+                              ^
+  symbol:   variable model
+  location: class AttendancePanel
+src\ui\student\AttendancePanel.java:33: error: cannot find symbol
+        attTable.setRowHeight(40);
+        ^
+  symbol:   variable attTable
+  location: class AttendancePanel
+src\ui\student\AttendancePanel.java:34: error: cannot find symbol
+        attTable.setIntercellSpacing(new Dimension(0, 0));
+        ^
+  symbol:   variable attTable
+  location: class AttendancePanel
+src\ui\student\AttendancePanel.java:35: error: cannot find symbol
+        attTable.setShowGrid(false);
+        ^
+  symbol:   variable attTable
+  location: class AttendancePanel
+src\ui\student\AttendancePanel.java:36: error: cannot find symbol
+        attTable.setShowHorizontalLines(true);
+        ^
+  symbol:   variable attTable
+  location: class AttendancePanel
+src\ui\student\AttendancePanel.java:37: error: cannot find symbol
+        attTable.setGridColor(new Color(230, 230, 230));
+        ^
+  symbol:   variable attTable
+  location: class AttendancePanel
+src\ui\student\AttendancePanel.java:41: error: cannot find symbol
+        JScrollPane scrollPane = new JScrollPane(attTable);
+                                                 ^
+  symbol:   variable attTable
+  location: class AttendancePanel
+src\ui\student\AttendancePanel.java:48: error: cannot find symbol
+        model.setRowCount(0);
+        ^
+  symbol:   variable model
+  location: class AttendancePanel
+src\ui\student\AttendancePanel.java:49: error: cannot find symbol
+        model.addRow(new Object[]{"Loading...", "", "", ""});
+        ^
+  symbol:   variable model
+  location: class AttendancePanel
+src\ui\student\AttendancePanel.java:63: error: cannot find symbol
+                    model.setRowCount(0);
+                    ^
+  symbol: variable model
+src\ui\student\AttendancePanel.java:67: error: cannot find symbol
+                            model.addRow(new Object[]{
+                            ^
+  symbol: variable model
+src\ui\student\AttendancePanel.java:72: error: cannot find symbol
+                        model.addRow(new Object[]{"No Data Available", "", "", ""});
+                        ^
+  symbol: variable model
+src\ui\student\AttendancePanel.java:76: error: cannot find symbol
+                    model.setRowCount(0);
+                    ^
+  symbol: variable model
+src\ui\student\AttendancePanel.java:77: error: cannot find symbol
+                    model.addRow(new Object[]{"Error loading data", "", "", ""});
+                    ^
+  symbol: variable model
+src\ui\student\FeesPanel.java:56: error: cannot find symbol
+        payTable = new JTable(model);
+        ^
+  symbol:   variable payTable
+  location: class FeesPanel
+src\ui\student\FeesPanel.java:57: error: cannot find symbol
+        payTable.setRowHeight(40);
+        ^
+  symbol:   variable payTable
+  location: class FeesPanel
+src\ui\student\FeesPanel.java:58: error: cannot find symbol
+        payTable.setIntercellSpacing(new Dimension(0, 0));
+        ^
+  symbol:   variable payTable
+  location: class FeesPanel
+src\ui\student\FeesPanel.java:59: error: cannot find symbol
+        payTable.setShowGrid(false);
+        ^
+  symbol:   variable payTable
+  location: class FeesPanel
+src\ui\student\FeesPanel.java:60: error: cannot find symbol
+        payTable.setShowHorizontalLines(true);
+        ^
+  symbol:   variable payTable
+  location: class FeesPanel
+src\ui\student\FeesPanel.java:61: error: cannot find symbol
+        payTable.setGridColor(new Color(230, 230, 230));
+        ^
+  symbol:   variable payTable
+  location: class FeesPanel
+src\ui\student\FeesPanel.java:65: error: cannot find symbol
+        JScrollPane scrollPane = new JScrollPane(payTable);
+                                                 ^
+  symbol:   variable payTable
+  location: class FeesPanel
+src\ui\student\ProfilePanel.java:90: error: bad operand types for binary operator '!='
+                        String door = s.getDoorNo() != null ? s.getDoorNo() : "";
+                                                    ^
+  first type:  int
+  second type: <null>
+src\ui\student\ProfilePanel.java:90: error: incompatible types: bad type in conditional expression
+                        String door = s.getDoorNo() != null ? s.getDoorNo() : "";
+                                                                         ^
+    int cannot be converted to String
+src\ui\student\ProfilePanel.java:93: error: bad operand types for binary operator '!='
+                        String pin = s.getPincode() != null ? s.getPincode() : "";
+                                                    ^
+  first type:  long
+  second type: <null>
+src\ui\student\ProfilePanel.java:93: error: incompatible types: bad type in conditional expression
+                        String pin = s.getPincode() != null ? s.getPincode() : "";
+                                                                          ^
+    long cannot be converted to String
+src\ui\teacher\TeacherDashboard.java:33: error: constructor OverviewPanel in class OverviewPanel cannot be applied to given types;
+        mainContentPanel.add(new OverviewPanel(user), "Dashboard");
+                             ^
+  required: no arguments
+  found:    User
+  reason: actual and formal argument lists differ in length
+Note: src\ui\student\FeesPanel.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+29 errors

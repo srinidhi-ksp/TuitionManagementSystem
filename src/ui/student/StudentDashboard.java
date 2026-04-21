@@ -1,7 +1,7 @@
 package ui.student;
 
 import ui.LoginFrame;
-import model.User;
+import util.SessionManager;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
@@ -16,10 +16,7 @@ public class StudentDashboard extends JFrame {
     private Color sidebarBg = Color.WHITE;
     private Color bgLight = new Color(245, 247, 250);
     
-    private User studentContext; // the authed student user
-
-    public StudentDashboard(User user) {
-        this.studentContext = user;
+    public StudentDashboard(model.User user) {
         
         setTitle("MRK Tuition - Student Portal");
         setSize(1300, 800);
@@ -33,13 +30,13 @@ public class StudentDashboard extends JFrame {
         mainContentPanel.setBackground(bgLight);
 
         // Sub-panels
-        mainContentPanel.add(new OverviewPanel(studentContext), "Dashboard");
-        mainContentPanel.add(new MySubjectsPanel(studentContext), "My Subjects");
-        mainContentPanel.add(new MyBatchesPanel(studentContext), "My Batches");
-        mainContentPanel.add(new SyllabusProgressPanel(studentContext), "Syllabus Progress");
-        mainContentPanel.add(new AttendancePanel(studentContext), "Attendance");
-        mainContentPanel.add(new FeesPanel(studentContext), "Fees & Payments");
-        mainContentPanel.add(new ProfilePanel(studentContext), "Profile");
+        mainContentPanel.add(new OverviewPanel(), "Dashboard");
+        mainContentPanel.add(new MySubjectsPanel(), "My Subjects");
+        mainContentPanel.add(new MyBatchesPanel(), "My Batches");
+        mainContentPanel.add(new SyllabusProgressPanel(), "Syllabus Progress");
+        mainContentPanel.add(new AttendancePanel(), "Attendance");
+        mainContentPanel.add(new FeesPanel(), "Fees & Payments");
+        mainContentPanel.add(new ProfilePanel(), "Profile");
 
         add(createTopNavbar(), BorderLayout.NORTH);
         add(createSidebar(), BorderLayout.WEST);
@@ -69,7 +66,8 @@ public class StudentDashboard extends JFrame {
         JPanel userPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 20, 15));
         userPanel.setBackground(Color.WHITE);
         
-        JButton profileBtn = new JButton("👤 " + (studentContext.getName() != null ? studentContext.getName() : "Student") + " ▾");
+        String userName = SessionManager.getInstance().getUserName();
+        JButton profileBtn = new JButton("👤 " + (userName != null ? userName : "Student") + " ▾");
         profileBtn.setBackground(new Color(245, 245, 245));
         profileBtn.setForeground(Color.DARK_GRAY);
         profileBtn.setFont(new Font("Arial", Font.BOLD, 14));
@@ -93,6 +91,7 @@ public class StudentDashboard extends JFrame {
         logoutItem.setBackground(Color.WHITE);
         logoutItem.setForeground(new Color(220, 50, 50));
         logoutItem.addActionListener(e -> {
+            SessionManager.getInstance().clearSession();
             dispose();
             new LoginFrame().setVisible(true);
         });

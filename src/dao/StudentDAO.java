@@ -8,6 +8,7 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.ReplaceOptions;
 
 import model.Student;
 import db.DBConnection;
@@ -85,6 +86,25 @@ public class StudentDAO {
         return false;
     }
 
+    public boolean updateStudent(Student student) {
+        if (studentCollection == null) return false;
+        try {
+            Document doc = DocumentMapper.studentToDocument(student);
+            long matched = studentCollection.replaceOne(
+                Filters.or(
+                    Filters.eq("_id",     student.getUserId()),
+                    Filters.eq("user_id", student.getUserId())
+                ),
+                doc,
+                new ReplaceOptions().upsert(false)
+            ).getMatchedCount();
+            return matched > 0;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
     public List<Student> getAllStudents() {
         List<Student> studentList = new ArrayList<>();
         if (studentCollection == null) return studentList;
@@ -96,6 +116,22 @@ public class StudentDAO {
                 if (s != null) {
                     studentList.add(s);
                 }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return studentList;
+    }
+
+    public List<Student> getStudentsByIds(List<String> userIds) {
+        List<Student> studentList = new ArrayList<>();
+        if (studentCollection == null || userIds.isEmpty()) return studentList;
+
+        try (MongoCursor<Document> cursor = studentCollection.find(Filters.in("user_id", userIds)).iterator()) {
+            while (cursor.hasNext()) {
+                Document doc = cursor.next();
+                Student s = DocumentMapper.documentToStudent(doc);
+                if (s != null) studentList.add(s);
             }
         } catch (Exception e) {
             e.printStackTrace();

@@ -8,6 +8,7 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.ReplaceOptions;
 
 import model.Teacher;
 import db.DBConnection;
@@ -62,6 +63,25 @@ public class TeacherDAO {
                 )
             ).getDeletedCount();
             return deletedCount > 0;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    public boolean updateTeacher(Teacher teacher) {
+        if (teacherCollection == null) return false;
+        try {
+            Document doc = DocumentMapper.teacherToDocument(teacher);
+            long matched = teacherCollection.replaceOne(
+                Filters.or(
+                    Filters.eq("_id",     teacher.getUserId()),
+                    Filters.eq("user_id", teacher.getUserId())
+                ),
+                doc,
+                new ReplaceOptions().upsert(false)
+            ).getMatchedCount();
+            return matched > 0;
         } catch (Exception e) {
             e.printStackTrace();
         }

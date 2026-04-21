@@ -75,4 +75,16 @@ public class SubjectDAO {
         }
         return false;
     }
+
+    public boolean updateSubject(Subject subject) {
+        if (subjectCollection == null) return false;
+        try {
+            Document doc = DocumentMapper.subjectToDocument(subject);
+            long matched = subjectCollection.replaceOne(Filters.eq("_id", subject.getSubjectId()), doc).getMatchedCount();
+            return matched > 0;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
 }

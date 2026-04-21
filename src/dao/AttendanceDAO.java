@@ -68,6 +68,22 @@ public class AttendanceDAO {
         return list;
     }
 
+    public List<Attendance> getAttendanceByStudentId(String studentId) {
+        List<Attendance> list = new ArrayList<>();
+        if (attendanceCollection == null) return list;
+
+        try (MongoCursor<Document> cursor = attendanceCollection.find(Filters.eq("user_id", studentId)).iterator()) {
+            while (cursor.hasNext()) {
+                Document doc = cursor.next();
+                Attendance a = DocumentMapper.documentToAttendance(doc);
+                if (a != null) list.add(a);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
     public boolean deleteAttendance(int attendanceId) {
         if (attendanceCollection == null) return false;
         try {
@@ -133,6 +149,58 @@ public class AttendanceDAO {
                     Filters.eq("user_id",  att.getUserId()),
                     Filters.eq("batch_id", batchId),
                     Filters.eq("date_str", dateStr)
+                ),
+                doc,
+                new ReplaceOptions().upsert(true)
+            );
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    // ── Teacher attendance ──────────────────────────────────────────────────────
+
+    /**
+     * Returns the attendance status for a teacher on a given date.
+     * Falls back to "Present" if no record exists.
+     */
+    public String getTeacherAttendanceStatus(String teacherId, String dateStr) {
+        if (attendanceCollection == null) return "Present";
+        try {
+            Document doc = attendanceCollection.find(
+                Filters.and(
+                    Filters.eq("user_id",  teacherId),
+                    Filters.eq("date_str", dateStr),
+                    Filters.eq("type",     "TEACHER")
+                )
+            ).first();
+            if (doc != null && doc.getString("status") != null) return doc.getString("status");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return "Present";
+    }
+
+    /**
+     * Upserts a teacher attendance record identified by user_id + date_str + type=TEACHER.
+     */
+    public boolean saveTeacherAttendance(String teacherId, String status, String dateStr) {
+        if (attendanceCollection == null) return false;
+        try {
+            Document doc = new Document()
+                .append("user_id",         teacherId)
+                .append("status",          status)
+                .append("date_str",        dateStr)
+                .append("type",            "TEACHER")
+                .append("marked_by",       "ADMIN")
+                .append("attendance_date", new java.util.Date());
+            attendanceCollection.replaceOne(
+                Filters.and(
+                    Filters.eq("user_id",  teacherId),
+                    Filters.eq("date_str", dateStr),
+                    Filters.eq("type",     "TEACHER")
                 ),
                 doc,
                 new ReplaceOptions().upsert(true)

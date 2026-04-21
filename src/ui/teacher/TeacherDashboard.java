@@ -1,7 +1,7 @@
 package ui.teacher;
 
 import ui.LoginFrame;
-import model.User;
+import util.SessionManager;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
@@ -16,10 +16,7 @@ public class TeacherDashboard extends JFrame {
     private Color sidebarBg = Color.WHITE;
     private Color bgLight = new Color(245, 247, 250);
     
-    private User teacherContext;
-
-    public TeacherDashboard(User user) {
-        this.teacherContext = user;
+    public TeacherDashboard(model.User user) {
         
         setTitle("MRK Tuition - Teacher Workspace");
         setSize(1300, 800);
@@ -32,14 +29,14 @@ public class TeacherDashboard extends JFrame {
         mainContentPanel = new JPanel(cardLayout);
         mainContentPanel.setBackground(bgLight);
 
-        // Sub-panels initialized passing the teacher object token
-        mainContentPanel.add(new OverviewPanel(teacherContext), "Dashboard");
-        mainContentPanel.add(new MyBatchesPanel(teacherContext), "My Batches");
-        mainContentPanel.add(new AttendanceModulePanel(teacherContext), "Take Attendance");
-        mainContentPanel.add(new TestsMarksPanel(teacherContext), "Tests & Marks");
-        mainContentPanel.add(new SyllabusUpdatePanel(teacherContext), "Syllabus Progress");
-        mainContentPanel.add(new StudentsListPanel(teacherContext), "My Students");
-        mainContentPanel.add(new ProfilePanel(teacherContext), "Profile");
+        // Sub-panels initialized passing the teacher object token where required
+        mainContentPanel.add(new OverviewPanel(), "Dashboard");
+        mainContentPanel.add(new MyBatchesPanel(user), "My Batches");
+        mainContentPanel.add(new AttendanceModulePanel(), "Take Attendance");
+        mainContentPanel.add(new TestsMarksPanel(user), "Tests & Marks");
+        mainContentPanel.add(new SyllabusUpdatePanel(user), "Syllabus Progress");
+        mainContentPanel.add(new StudentsListPanel(user), "My Students");
+        mainContentPanel.add(new ProfilePanel(user), "Profile");
 
         add(createTopNavbar(), BorderLayout.NORTH);
         add(createSidebar(), BorderLayout.WEST);
@@ -69,7 +66,8 @@ public class TeacherDashboard extends JFrame {
         JPanel userPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 20, 15));
         userPanel.setBackground(Color.WHITE);
         
-        JButton profileBtn = new JButton("🏫 " + (teacherContext.getName() != null ? teacherContext.getName() : "Teacher") + " ▾");
+        String userName = SessionManager.getInstance().getUserName();
+        JButton profileBtn = new JButton("🏫 " + (userName != null ? userName : "Teacher") + " ▾");
         profileBtn.setBackground(new Color(245, 245, 245));
         profileBtn.setForeground(Color.DARK_GRAY);
         profileBtn.setFont(new Font("Arial", Font.BOLD, 14));
@@ -93,6 +91,7 @@ public class TeacherDashboard extends JFrame {
         logoutItem.setBackground(Color.WHITE);
         logoutItem.setForeground(new Color(220, 50, 50));
         logoutItem.addActionListener(e -> {
+            SessionManager.getInstance().clearSession();
             dispose();
             new LoginFrame().setVisible(true);
         });

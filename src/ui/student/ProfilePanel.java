@@ -5,16 +5,15 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.util.List;
 
-import model.User;
 import model.Student;
 import dao.StudentDAO;
+import util.SessionManager;
 
 public class ProfilePanel extends JPanel {
 
-    private User user;
+    private JPanel content;
 
-    public ProfilePanel(User user) {
-        this.user = user;
+    public ProfilePanel() {
         setLayout(new BorderLayout());
         setBackground(Color.WHITE);
         setBorder(new EmptyBorder(30, 40, 30, 40));
@@ -29,34 +28,11 @@ public class ProfilePanel extends JPanel {
         header.add(title, BorderLayout.WEST);
         add(header, BorderLayout.NORTH);
 
-        JPanel content = new JPanel(new GridLayout(0, 2, 20, 20));
+        content = new JPanel(new GridLayout(0, 2, 20, 20));
         content.setBackground(Color.WHITE);
         content.setBorder(new EmptyBorder(20, 20, 20, 20));
 
-        Student s = null;
-        List<Student> allStudents = new StudentDAO().getAllStudents();
-        if (allStudents != null) {
-            for (Student st : allStudents) {
-                if (st.getUserId().equals(user.getUserId())) {
-                    s = st;
-                    break;
-                }
-            }
-        }
-
-        content.add(createField("Student ID", user.getUserId()));
-        content.add(createField("Full Name", user.getName() != null ? user.getName() : "-"));
-        content.add(createField("Email Address", user.getEmail() != null ? user.getEmail() : "-"));
-        
-        if (s != null) {
-            content.add(createField("Standard", s.getCurrentStd()));
-            content.add(createField("Board", s.getBoard()));
-            String joinStr = s.getJoinDate() != null ? s.getJoinDate().toString().substring(0, 10) : "-";
-            content.add(createField("Join Date", joinStr));
-            content.add(createField("Address", s.getDoorNo() + ", " + s.getStreet() + ", " + s.getCity() + " - " + s.getPincode()));
-        } else {
-            content.add(createField("Academic Details", "Not found in student database."));
-        }
+        loadProfileAsync();
 
         JPanel wrapper = new JPanel(new BorderLayout());
         wrapper.setBackground(Color.WHITE);
@@ -79,5 +55,65 @@ public class ProfilePanel extends JPanel {
         p.add(l);
         p.add(v);
         return p;
+    }
+
+    private void loadProfileAsync() {
+        content.removeAll();
+        content.add(new JLabel("Loading profile..."));
+
+        new SwingWorker<Student, Void>() {
+            @Override
+            protected Student doInBackground() throws Exception {
+                String userId = SessionManager.getInstance().getUserId();
+                if (userId == null) return null;
+                return new StudentDAO().getStudentByUserId(userId);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    Student s = get();
+                    content.removeAll();
+                    
+                    String smUserId = SessionManager.getInstance().getUserId();
+                    String smUserName = SessionManager.getInstance().getUserName();
+                    
+                    content.add(createField("Student ID", smUserId != null ? smUserId : "-"));
+                    content.add(createField("Full Name", smUserName != null ? smUserName : "-"));
+                    
+                    if (s != null) {
+                        content.add(createField("Email Address", s.getEmail() != null ? s.getEmail() : "-"));
+                        content.add(createField("Standard", s.getCurrentStd()));
+                        content.add(createField("Board", s.getBoard()));
+                        String joinStr = s.getJoinDate() != null ? s.getJoinDate().toString().substring(0, 10) : "-";
+                        content.add(createField("Join Date", joinStr));
+                        String door = s.getDoorNo() != 0 ? String.valueOf(s.getDoorNo()) : "";
+                        String street = s.getStreet() != null ? s.getStreet() : "";
+                        String city = s.getCity() != null ? s.getCity() : "";
+                        String pin = s.getPincode() != 0 ? String.valueOf(s.getPincode()) : "";
+                        
+                        String addr = (!door.isEmpty() ? door + ", " : "") + 
+                                      (!street.isEmpty() ? street + ", " : "") + 
+                                      (!city.isEmpty() ? city + " - " : "") + 
+                                      pin;
+                        if(addr.trim().isEmpty() || addr.trim().equals(", ,  -")) {
+                            addr = "Address not provided";
+                        }
+                        content.add(createField("Address", addr));
+                    } else {
+                        content.add(createField("Academic Details", "Not found in student database."));
+                    }
+                    
+                    content.revalidate();
+                    content.repaint();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    content.removeAll();
+                    content.add(new JLabel("Error loading profile."));
+                    content.revalidate();
+                    content.repaint();
+                }
+            }
+        }.execute();
     }
 }

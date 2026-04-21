@@ -7,18 +7,17 @@ import java.util.List;
 import java.util.HashSet;
 import java.util.Set;
 
-import model.User;
 import model.Batch;
 import model.Subject;
 import dao.EnrollmentDAO;
 import dao.SubjectDAO;
+import util.SessionManager;
 
 public class MySubjectsPanel extends JPanel {
 
-    private User student;
+    private JPanel gridPanel;
 
-    public MySubjectsPanel(User user) {
-        this.student = user;
+    public MySubjectsPanel() {
         setLayout(new BorderLayout());
         setBackground(Color.WHITE);
         setBorder(new EmptyBorder(30, 40, 30, 40));
@@ -33,32 +32,10 @@ public class MySubjectsPanel extends JPanel {
         header.add(title, BorderLayout.WEST);
         add(header, BorderLayout.NORTH);
 
-        JPanel gridPanel = new JPanel(new GridLayout(0, 3, 20, 20));
+        gridPanel = new JPanel(new GridLayout(0, 3, 20, 20));
         gridPanel.setBackground(Color.WHITE);
 
-        List<Batch> enrolled = new EnrollmentDAO().getBatchesByStudentId(student.getUserId());
-        Set<Integer> subjectIds = new HashSet<>();
-        
-        if (enrolled != null) {
-            for (Batch b : enrolled) {
-                subjectIds.add(b.getSubjectId());
-            }
-        }
-
-        if (subjectIds.isEmpty()) {
-            gridPanel.setLayout(new FlowLayout(FlowLayout.LEFT));
-            JLabel empty = new JLabel("No subjects found. Wait for teacher assignments.");
-            empty.setForeground(Color.GRAY);
-            gridPanel.add(empty);
-        } else {
-            SubjectDAO subDao = new SubjectDAO();
-            for (Integer sid : subjectIds) {
-                Subject s = subDao.getSubjectById(sid);
-                if (s != null) {
-                    gridPanel.add(createSubjectCard(s));
-                }
-            }
-        }
+        loadSubjectsAsync();
 
         JScrollPane scrollPane = new JScrollPane(gridPanel);
         scrollPane.setBorder(null);
@@ -102,5 +79,66 @@ public class MySubjectsPanel extends JPanel {
         card.add(btn, BorderLayout.SOUTH);
 
         return card;
+    }
+
+    private void loadSubjectsAsync() {
+        gridPanel.removeAll();
+        JLabel loadLbl = new JLabel("Loading...");
+        loadLbl.setForeground(Color.GRAY);
+        gridPanel.add(loadLbl);
+
+        new SwingWorker<List<Subject>, Void>() {
+            @Override
+            protected List<Subject> doInBackground() throws Exception {
+                String userId = SessionManager.getInstance().getUserId();
+                List<Subject> subjects = new java.util.ArrayList<>();
+                if (userId == null) return subjects;
+
+                List<Batch> enrolled = new EnrollmentDAO().getBatchesByStudentId(userId);
+                Set<Integer> subjectIds = new HashSet<>();
+                
+                if (enrolled != null) {
+                    for (Batch b : enrolled) {
+                        subjectIds.add(b.getSubjectId());
+                    }
+                }
+
+                SubjectDAO subDao = new SubjectDAO();
+                for (Integer sid : subjectIds) {
+                    Subject s = subDao.getSubjectById(sid);
+                    if (s != null) subjects.add(s);
+                }
+                return subjects;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    List<Subject> subjects = get();
+                    gridPanel.removeAll();
+                    if (subjects.isEmpty()) {
+                        gridPanel.setLayout(new FlowLayout(FlowLayout.LEFT));
+                        JLabel empty = new JLabel("No subjects found. Wait for teacher assignments.");
+                        empty.setForeground(Color.GRAY);
+                        gridPanel.add(empty);
+                    } else {
+                        gridPanel.setLayout(new GridLayout(0, 3, 20, 20));
+                        for (Subject s : subjects) {
+                            gridPanel.add(createSubjectCard(s));
+                        }
+                    }
+                    gridPanel.revalidate();
+                    gridPanel.repaint();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    gridPanel.removeAll();
+                    JLabel errorLbl = new JLabel("Error loading subjects.");
+                    errorLbl.setForeground(Color.RED);
+                    gridPanel.add(errorLbl);
+                    gridPanel.revalidate();
+                    gridPanel.repaint();
+                }
+            }
+        }.execute();
     }
 }

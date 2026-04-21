@@ -5,17 +5,18 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.util.List;
 
-import model.User;
 import model.Batch;
 import dao.EnrollmentDAO;
+import util.SessionManager;
 
 public class OverviewPanel extends JPanel {
 
-    private User student;
     private Color bgLight = new Color(245, 247, 250);
+    private JPanel statsPanel;
+    private JPanel lowerPanel;
+    private JLabel title;
 
-    public OverviewPanel(User user) {
-        this.student = user;
+    public OverviewPanel() {
         setLayout(new BorderLayout());
         setBackground(bgLight);
         setBorder(new EmptyBorder(30, 40, 30, 40));
@@ -24,7 +25,7 @@ public class OverviewPanel extends JPanel {
         header.setBackground(bgLight);
         header.setBorder(new EmptyBorder(0, 0, 20, 0));
         
-        JLabel title = new JLabel("Welcome back, " + (student.getName() != null ? student.getName() : "Student") + "!");
+        title = new JLabel("Welcome back!");
         title.setFont(new Font("Serif", Font.BOLD, 28));
         
         JLabel subtitle = new JLabel("Here is your academic summary across all active batches.");
@@ -34,17 +35,9 @@ public class OverviewPanel extends JPanel {
         header.add(title);
         header.add(subtitle);
 
-        JPanel statsPanel = new JPanel(new GridLayout(1, 4, 20, 0));
+        statsPanel = new JPanel(new GridLayout(1, 4, 20, 0));
         statsPanel.setBackground(bgLight);
-
-        // Fetch counts using Enrollment or standard mappings
-        List<Batch> enrolled = new EnrollmentDAO().getBatchesByStudentId(student.getUserId());
-        int batchCount = enrolled != null ? enrolled.size() : 0;
-
-        statsPanel.add(createModernStatCard("Active Batches", String.valueOf(batchCount), new Color(100, 150, 255)));
-        statsPanel.add(createModernStatCard("Syllabus Avg", "65%", new Color(100, 200, 150))); // mock dynamic logic placeholder
-        statsPanel.add(createModernStatCard("Attendance", "92%", new Color(180, 100, 255))); // mock dynamic logic placeholder
-        statsPanel.add(createModernStatCard("Fees Status", "PAID", new Color(100, 200, 150))); // mock dynamic logic placeholder
+        statsPanel.add(new JLabel("Loading stats..."));
 
         JPanel topSection = new JPanel(new BorderLayout());
         topSection.setBackground(bgLight);
@@ -53,14 +46,14 @@ public class OverviewPanel extends JPanel {
 
         add(topSection, BorderLayout.NORTH);
         
-        JPanel lowerPanel = new JPanel(new GridLayout(1, 2, 20, 0));
+        lowerPanel = new JPanel(new GridLayout(1, 2, 20, 0));
         lowerPanel.setBackground(bgLight);
         lowerPanel.setBorder(new EmptyBorder(20, 0, 0, 0));
-        
-        lowerPanel.add(createNotificationCard());
-        lowerPanel.add(createUpcomingClassesCard(enrolled));
+        lowerPanel.add(new JLabel("Loading..."));
 
         add(lowerPanel, BorderLayout.CENTER);
+
+        loadOverviewDataAsync();
     }
 
     private JPanel createModernStatCard(String title, String value, Color iconColor) {
@@ -157,5 +150,43 @@ public class OverviewPanel extends JPanel {
         
         card.add(new JScrollPane(list), BorderLayout.CENTER);
         return card;
+    }
+
+    private void loadOverviewDataAsync() {
+        new SwingWorker<List<Batch>, Void>() {
+            @Override
+            protected List<Batch> doInBackground() throws Exception {
+                String userId = SessionManager.getInstance().getUserId();
+                if (userId == null) return new java.util.ArrayList<>();
+                return new EnrollmentDAO().getBatchesByStudentId(userId);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    List<Batch> enrolled = get();
+                    int batchCount = enrolled != null ? enrolled.size() : 0;
+                    
+                    String userName = SessionManager.getInstance().getUserName();
+                    title.setText("Welcome back, " + (userName != null ? userName : "Student") + "!");
+
+                    statsPanel.removeAll();
+                    statsPanel.add(createModernStatCard("Active Batches", String.valueOf(batchCount), new Color(100, 150, 255)));
+                    statsPanel.add(createModernStatCard("Syllabus Avg", "65%", new Color(100, 200, 150))); // mock
+                    statsPanel.add(createModernStatCard("Attendance", "92%", new Color(180, 100, 255))); // mock
+                    statsPanel.add(createModernStatCard("Fees Status", "PAID", new Color(100, 200, 150))); // mock
+                    statsPanel.revalidate();
+                    statsPanel.repaint();
+
+                    lowerPanel.removeAll();
+                    lowerPanel.add(createNotificationCard());
+                    lowerPanel.add(createUpcomingClassesCard(enrolled));
+                    lowerPanel.revalidate();
+                    lowerPanel.repaint();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }.execute();
     }
 }

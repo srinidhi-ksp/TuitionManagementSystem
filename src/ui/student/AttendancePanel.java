@@ -6,18 +6,16 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.util.List;
 
-import model.User;
 import model.Attendance;
 import dao.AttendanceDAO;
+import util.SessionManager;
 
 public class AttendancePanel extends JPanel {
 
-    private User student;
-    private JTable attTable;
     private DefaultTableModel model;
+    private JTable attTable;
 
-    public AttendancePanel(User user) {
-        this.student = user;
+    public AttendancePanel() {
         setLayout(new BorderLayout());
         setBackground(Color.WHITE);
         setBorder(new EmptyBorder(30, 40, 30, 40));
@@ -41,7 +39,7 @@ public class AttendancePanel extends JPanel {
         attTable.setShowHorizontalLines(true);
         attTable.setGridColor(new Color(230, 230, 230));
 
-        refreshTable();
+        loadAttendanceData();
 
         JScrollPane scrollPane = new JScrollPane(attTable);
         scrollPane.setBorder(BorderFactory.createLineBorder(new Color(230,230,230)));
@@ -49,20 +47,39 @@ public class AttendancePanel extends JPanel {
         add(scrollPane, BorderLayout.CENTER);
     }
 
-    private void refreshTable() {
+    private void loadAttendanceData() {
         model.setRowCount(0);
-        List<Attendance> allAtt = new AttendanceDAO().getAllAttendance();
+        model.addRow(new Object[]{"Loading...", "", "", ""});
         
-        if (allAtt != null) {
-            for (Attendance a : allAtt) {
-                // Filter specifically for this student
-                if (a.getUserId() != null && a.getUserId().equals(student.getUserId())) {
-                    String dateStr = a.getAttendanceDate() != null ? a.getAttendanceDate().toString().substring(0, 10) : "";
-                    model.addRow(new Object[]{
-                        dateStr, a.getStatus(), a.getReason() != null ? a.getReason() : "-", a.getMarkedBy()
-                    });
+        new SwingWorker<List<Attendance>, Void>() {
+            @Override
+            protected List<Attendance> doInBackground() throws Exception {
+                String userId = SessionManager.getInstance().getUserId();
+                if (userId == null) return new java.util.ArrayList<>();
+                return new AttendanceDAO().getAttendanceByStudentId(userId);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    List<Attendance> attendances = get();
+                    model.setRowCount(0);
+                    if (attendances != null && !attendances.isEmpty()) {
+                        for (Attendance a : attendances) {
+                            String dateStr = a.getAttendanceDate() != null ? a.getAttendanceDate().toString().substring(0, 10) : "";
+                            model.addRow(new Object[]{
+                                dateStr, a.getStatus(), a.getReason() != null ? a.getReason() : "-", a.getMarkedBy()
+                            });
+                        }
+                    } else {
+                        model.addRow(new Object[]{"No Data Available", "", "", ""});
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    model.setRowCount(0);
+                    model.addRow(new Object[]{"Error loading data", "", "", ""});
                 }
             }
-        }
+        }.execute();
     }
 }

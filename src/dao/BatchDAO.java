@@ -93,4 +93,16 @@ public class BatchDAO {
         }
         return false;
     }
+
+    public boolean updateBatch(Batch batch) {
+        if (batchCollection == null) return false;
+        try {
+            Document doc = DocumentMapper.batchToDocument(batch);
+            long matched = batchCollection.replaceOne(Filters.eq("_id", batch.getBatchId()), doc).getMatchedCount();
+            return matched > 0;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
 }

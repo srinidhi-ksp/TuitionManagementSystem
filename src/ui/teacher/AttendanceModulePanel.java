@@ -7,30 +7,29 @@ import java.awt.*;
 import java.util.List;
 import java.util.ArrayList;
 
-import model.User;
 import model.Batch;
 import model.Student;
-import model.Enrollment;
 import model.Attendance;
 import dao.BatchDAO;
 import dao.EnrollmentDAO;
 import dao.StudentDAO;
 import dao.AttendanceDAO;
+import util.SessionManager;
 import java.util.Date;
 import java.text.SimpleDateFormat;
 
 public class AttendanceModulePanel extends JPanel {
 
-    private User teacherContext;
     private JComboBox<String> batchSelector;
     private JTextField dateField;
     private JTable studentTable;
     private DefaultTableModel model;
     private List<Batch> myBatches;
     private List<Student> currentStudents;
+    private JButton loadBtn;
+    private JButton saveBtn;
 
-    public AttendanceModulePanel(User user) {
-        this.teacherContext = user;
+    public AttendanceModulePanel() {
         setLayout(new BorderLayout());
         setBackground(Color.WHITE);
         setBorder(new EmptyBorder(30, 40, 30, 40));
@@ -45,7 +44,8 @@ public class AttendanceModulePanel extends JPanel {
         JPanel controlPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 0));
         controlPanel.setBackground(Color.WHITE);
         
-        myBatches = new BatchDAO().getBatchesByTeacherId(teacherContext.getUserId());
+        String userId = SessionManager.getInstance().getUserId();
+        myBatches = userId != null ? new BatchDAO().getBatchesByTeacherId(userId) : new ArrayList<>();
         batchSelector = new JComboBox<>();
         if(myBatches != null) {
             batchSelector.addItem("-- Select Batch --");
@@ -56,10 +56,10 @@ public class AttendanceModulePanel extends JPanel {
         
         dateField = new JTextField(new SimpleDateFormat("yyyy-MM-dd").format(new Date()), 10);
         
-        JButton loadBtn = new JButton("Load Students");
+        loadBtn = new JButton("Load Students");
         loadBtn.setBackground(new Color(245, 245, 250));
         loadBtn.setFocusPainted(false);
-        loadBtn.addActionListener(e -> loadStudentRoster());
+        loadBtn.addActionListener(e -> loadStudentRosterAsync());
         
         controlPanel.add(new JLabel("Batch:"));
         controlPanel.add(batchSelector);
@@ -100,41 +100,57 @@ public class AttendanceModulePanel extends JPanel {
         footer.setBackground(Color.WHITE);
         footer.setBorder(new EmptyBorder(20, 0, 0, 0));
         
-        JButton saveBtn = new JButton("Save Attendance");
+        saveBtn = new JButton("Save Attendance");
         saveBtn.setPreferredSize(new Dimension(160, 40));
         saveBtn.setBackground(new Color(30, 190, 160));
         saveBtn.setForeground(Color.WHITE);
         saveBtn.setFocusPainted(false);
-        saveBtn.addActionListener(e -> saveAttendance());
+        saveBtn.addActionListener(e -> saveAttendanceAsync());
         
         footer.add(saveBtn);
         add(footer, BorderLayout.SOUTH);
     }
 
-    private void loadStudentRoster() {
-        model.setRowCount(0);
-        currentStudents = new ArrayList<>();
-        
+    private void loadStudentRosterAsync() {
         if(batchSelector.getSelectedIndex() <= 0) return;
         
         Batch selectedBatch = myBatches.get(batchSelector.getSelectedIndex() - 1);
-        List<Enrollment> enrollments = new EnrollmentDAO().getAllEnrollments();
-        List<Student> allStudents = new StudentDAO().getAllStudents();
-        
-        for(Enrollment e : enrollments) {
-            if(e.getBatchId() == selectedBatch.getBatchId()) {
-                for(Student s : allStudents) {
-                    if(s.getUserId().equals(e.getStudentUserId())) {
-                        currentStudents.add(s);
-                        model.addRow(new Object[]{ s.getUserId(), s.getName(), true }); // Default to Present
-                        break;
+        model.setRowCount(0);
+        model.addRow(new Object[]{"Loading...", "Loading roster...", false});
+        loadBtn.setEnabled(false);
+
+        new SwingWorker<List<Student>, Void>() {
+            @Override
+            protected List<Student> doInBackground() throws Exception {
+                List<String> studentIds = new EnrollmentDAO().getStudentIdsByBatchId(selectedBatch.getBatchId());
+                if (studentIds == null || studentIds.isEmpty()) return new ArrayList<>();
+                return new StudentDAO().getStudentsByIds(studentIds);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    currentStudents = get();
+                    model.setRowCount(0);
+                    if (currentStudents != null && !currentStudents.isEmpty()) {
+                        for(Student s : currentStudents) {
+                            model.addRow(new Object[]{ s.getUserId(), s.getName(), true }); // Default to Present
+                        }
+                    } else {
+                        model.addRow(new Object[]{"N/A", "No students in this batch", false});
                     }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    model.setRowCount(0);
+                    model.addRow(new Object[]{"Error", "Failed to load students", false});
+                } finally {
+                    loadBtn.setEnabled(true);
                 }
             }
-        }
+        }.execute();
     }
 
-    private void saveAttendance() {
+    private void saveAttendanceAsync() {
         if(currentStudents == null || currentStudents.isEmpty()) {
             JOptionPane.showMessageDialog(this, "No students loaded.");
             return;
@@ -144,33 +160,60 @@ public class AttendanceModulePanel extends JPanel {
             studentTable.getCellEditor().stopCellEditing();
         }
 
-        AttendanceDAO attDao = new AttendanceDAO();
-        try {
-            Date attDate = new SimpleDateFormat("yyyy-MM-dd").parse(dateField.getText());
-            int successCount = 0;
-            
-            for(int i = 0; i < studentTable.getRowCount(); i++) {
-                String sId = (String) model.getValueAt(i, 0);
-                boolean isPresent = (Boolean) model.getValueAt(i, 2);
+        saveBtn.setEnabled(false);
+        saveBtn.setText("Saving...");
+
+        // Capture table data before threading
+        final List<Object[]> rowData = new ArrayList<>();
+        for(int i = 0; i < studentTable.getRowCount(); i++) {
+            rowData.add(new Object[]{
+                model.getValueAt(i, 0),
+                model.getValueAt(i, 2)
+            });
+        }
+        
+        final String dateText = dateField.getText();
+
+        new SwingWorker<Integer, Void>() {
+            @Override
+            protected Integer doInBackground() throws Exception {
+                AttendanceDAO attDao = new AttendanceDAO();
+                Date attDate = new SimpleDateFormat("yyyy-MM-dd").parse(dateText);
+                int successCount = 0;
+                String teacherId = SessionManager.getInstance().getUserId();
                 
-                Attendance a = new Attendance();
-                a.setAttendanceId((int)(Math.random() * 100000));
-                a.setUserId(sId);
-                a.setAttendanceDate(attDate);
-                a.setStatus(isPresent ? "Present" : "Absent");
-                a.setMarkedBy(teacherContext.getUserId());
-                a.setReason(isPresent ? "Attended" : "Unexcused");
-                
-                if(attDao.addAttendance(a)) {
-                    successCount++;
+                for(Object[] row : rowData) {
+                    String sId = (String) row[0];
+                    boolean isPresent = (Boolean) row[1];
+                    
+                    Attendance a = new Attendance();
+                    a.setAttendanceId((int)(Math.random() * 100000));
+                    a.setUserId(sId);
+                    a.setAttendanceDate(attDate);
+                    a.setStatus(isPresent ? "Present" : "Absent");
+                    a.setMarkedBy(teacherId);
+                    a.setReason(isPresent ? "Attended" : "Unexcused");
+                    
+                    if(attDao.addAttendance(a)) {
+                        successCount++;
+                    }
+                }
+                return successCount;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    int successCount = get();
+                    JOptionPane.showMessageDialog(AttendanceModulePanel.this, "Successfully saved " + successCount + " records to DB.");
+                } catch(Exception e) {
+                    e.printStackTrace();
+                    JOptionPane.showMessageDialog(AttendanceModulePanel.this, "Error saving attendance. Ensure Date is YYYY-MM-DD.");
+                } finally {
+                    saveBtn.setEnabled(true);
+                    saveBtn.setText("Save Attendance");
                 }
             }
-            
-            JOptionPane.showMessageDialog(this, "Successfully saved " + successCount + " records mapping to DB.");
-            
-        } catch(Exception e) {
-            e.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Invalid Date Format. Use YYYY-MM-DD");
-        }
+        }.execute();
     }
 }

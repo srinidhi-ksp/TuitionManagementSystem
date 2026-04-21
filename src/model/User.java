@@ -10,6 +10,7 @@ public class User {
     private String password;
     private String role;
     private String address;
+    private String phone;
     private Date createdAt;
 
     // ✅ Default constructor
@@ -94,5 +95,13 @@ public class User {
 
     public void setCreatedAt(Date createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
     }
 }

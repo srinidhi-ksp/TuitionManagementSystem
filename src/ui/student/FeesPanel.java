@@ -6,19 +6,18 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.util.List;
 
-import model.User;
 import model.Fee;
 import model.Payment;
 import dao.FeesDAO;
+import util.SessionManager;
 
 public class FeesPanel extends JPanel {
 
-    private User student;
-    private JTable payTable;
     private DefaultTableModel model;
+    private JPanel statsPanel;
+    private JTable payTable;
 
-    public FeesPanel(User user) {
-        this.student = user;
+    public FeesPanel() {
         setLayout(new BorderLayout());
         setBackground(Color.WHITE);
         setBorder(new EmptyBorder(30, 40, 30, 40));
@@ -38,22 +37,10 @@ public class FeesPanel extends JPanel {
         JPanel feesPanel = new JPanel(new BorderLayout());
         feesPanel.add(header, BorderLayout.NORTH);
 
-        JPanel statsPanel = new JPanel(new GridLayout(1, 4, 20, 0));
+        statsPanel = new JPanel(new GridLayout(1, 4, 20, 0));
         statsPanel.setBackground(Color.WHITE);
-
-        Fee f = new FeesDAO().getFeeSummaryForStudent(student.getUserId());
-        
-        double total = f != null ? f.getTotalAmount() : 0.0;
-        double paid = f != null ? f.getPaidAmount() : 0.0;
-        double pending = total - paid;
-        String status = f != null ? f.getStatus() : "N/A";
-
-        statsPanel.add(createModernStatCard("Total Fees", "Rs. " + total, new Color(100, 150, 255)));
-        statsPanel.add(createModernStatCard("Amount Paid", "Rs. " + paid, new Color(100, 200, 150)));
-        statsPanel.add(createModernStatCard("Pending", "Rs. " + pending, new Color(255, 100, 100)));
-        statsPanel.add(createModernStatCard("Status", status, new Color(180, 100, 255)));
-        
         feesPanel.add(statsPanel, BorderLayout.CENTER);
+        
         add(feesPanel, BorderLayout.NORTH);
         
         JPanel historyPanel = new JPanel(new BorderLayout());
@@ -74,7 +61,7 @@ public class FeesPanel extends JPanel {
         payTable.setShowHorizontalLines(true);
         payTable.setGridColor(new Color(230, 230, 230));
 
-        refreshTable();
+        loadDataAsync();
 
         JScrollPane scrollPane = new JScrollPane(payTable);
         scrollPane.setBorder(BorderFactory.createLineBorder(new Color(230,230,230)));
@@ -108,20 +95,62 @@ public class FeesPanel extends JPanel {
         return card;
     }
 
-    private void refreshTable() {
+    private void loadDataAsync() {
+        statsPanel.removeAll();
+        statsPanel.add(createModernStatCard("Loading...", "", new Color(100, 150, 255)));
         model.setRowCount(0);
-        List<Payment> history = new FeesDAO().getPaymentsForStudent(student.getUserId());
+        model.addRow(new Object[]{"Loading...", "", "", ""});
         
-        if (history != null) {
-            for (Payment p : history) {
-                String dStr = p.getPaymentDate() != null ? p.getPaymentDate().toString().substring(0, 10) : "";
-                model.addRow(new Object[]{
-                    p.getReceiptNo() != null ? p.getReceiptNo() : "N/A",
-                    dStr,
-                    "Rs. " + p.getAmountPaid(),
-                    p.getPaymentMode()
-                });
+        new SwingWorker<Object[], Void>() {
+            @Override
+            protected Object[] doInBackground() throws Exception {
+                String userId = SessionManager.getInstance().getUserId();
+                if (userId == null) return new Object[]{null, new java.util.ArrayList<Payment>()};
+                Fee f = new FeesDAO().getFeeSummaryForStudent(userId);
+                List<Payment> history = new FeesDAO().getPaymentsForStudent(userId);
+                return new Object[]{f, history};
             }
-        }
+
+            @Override
+            protected void done() {
+                try {
+                    Object[] result = get();
+                    Fee f = (Fee) result[0];
+                    List<Payment> history = (List<Payment>) result[1];
+
+                    statsPanel.removeAll();
+                    double total = f != null ? f.getTotalAmount() : 0.0;
+                    double paid = f != null ? f.getPaidAmount() : 0.0;
+                    double pending = total - paid;
+                    String status = f != null ? f.getStatus() : "N/A";
+            
+                    statsPanel.add(createModernStatCard("Total Fees", "Rs. " + total, new Color(100, 150, 255)));
+                    statsPanel.add(createModernStatCard("Amount Paid", "Rs. " + paid, new Color(100, 200, 150)));
+                    statsPanel.add(createModernStatCard("Pending", "Rs. " + pending, new Color(255, 100, 100)));
+                    statsPanel.add(createModernStatCard("Status", status, new Color(180, 100, 255)));
+                    statsPanel.revalidate();
+                    statsPanel.repaint();
+
+                    model.setRowCount(0);
+                    if (history != null && !history.isEmpty()) {
+                        for (Payment p : history) {
+                            String dStr = p.getPaymentDate() != null ? p.getPaymentDate().toString().substring(0, 10) : "";
+                            model.addRow(new Object[]{
+                                p.getReceiptNo() != null ? p.getReceiptNo() : "N/A",
+                                dStr,
+                                "Rs. " + p.getAmountPaid(),
+                                p.getPaymentMode()
+                            });
+                        }
+                    } else {
+                        model.addRow(new Object[]{"No Data Available", "", "", ""});
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    model.setRowCount(0);
+                    model.addRow(new Object[]{"Error loading data", "", "", ""});
+                }
+            }
+        }.execute();
     }
 }

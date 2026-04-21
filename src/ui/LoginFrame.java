@@ -3,6 +3,7 @@ package ui;
 import service.AuthService;
 import model.User;
 import ui.admin.AdminDashboard;
+import util.SessionManager;
 
 import javax.swing.*;
 import javax.swing.border.*;
@@ -279,6 +280,29 @@ public class LoginFrame extends JFrame {
 
         User user = new AuthService().login(username, password, role);
         if (user != null) {
+            String sessionUserId = user.getUserId();
+            String sessionUserName = user.getName() != null ? user.getName() : user.getUserId();
+
+            if ("Student".equalsIgnoreCase(role)) {
+                model.Student s = new dao.StudentDAO().getStudentByUserId(user.getUserId());
+                if (s == null) s = new dao.StudentDAO().getStudentById(user.getUserId());
+                if (s != null) {
+                    sessionUserId = s.getUserId();
+                    if (s.getName() != null && !s.getName().trim().isEmpty()) {
+                        sessionUserName = s.getName();
+                    }
+                }
+            } else if ("Teacher".equalsIgnoreCase(role)) {
+                model.Teacher t = new dao.TeacherDAO().getTeacherById(user.getUserId());
+                if (t != null) {
+                    sessionUserId = t.getUserId();
+                    if (t.getName() != null && !t.getName().trim().isEmpty()) {
+                        sessionUserName = t.getName();
+                    }
+                }
+            }
+
+            SessionManager.getInstance().setSession(sessionUserId, user.getRole(), sessionUserName);
             openDashboard(user);
         } else {
             JOptionPane.showMessageDialog(this, "Invalid credentials. Please try again.", "Login Failed", JOptionPane.ERROR_MESSAGE);
