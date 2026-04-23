@@ -13,10 +13,27 @@ public class Batch {
     private Date endTime;
     private String meetingLink;
     private String classMode;
+    private String category; // e.g. "Class 12", "Class 11"
+    private String standard; // e.g. "8", "12" — dedicated field for EXACT matching
+    private String status = "ACTIVE"; // "ACTIVE" or "INACTIVE"
 
     // Default Constructor
     public Batch() {
     }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
+    }
+
+    public String getStandard() { return standard; }
+    public void setStandard(String standard) { this.standard = standard; }
 
     // Parameterized Constructor
     public Batch(int batchId, int subjectId, String teacherUserId,

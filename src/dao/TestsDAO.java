@@ -84,4 +84,19 @@ public class TestsDAO {
         }
         return false;
     }
+
+    public List<Test> getTestsByStudentId(String studentId) {
+        List<Test> tests = new ArrayList<>();
+        if (testsCollection == null) return tests;
+
+        try (MongoCursor<Document> cursor = testsCollection.find(Filters.eq("attempts.student_id", studentId)).iterator()) {
+            while (cursor.hasNext()) {
+                Test t = DocumentMapper.documentToTest(cursor.next());
+                if (t != null) tests.add(t);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return tests;
+    }
 }

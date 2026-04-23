@@ -1,51 +1,71 @@
 package service;
 
-import dao.StudentDAO;
-import dao.UserDAO;
-import model.Student;
+import java.util.ArrayList;
 import java.util.List;
+import dao.EnrollmentDAO;
+import dao.BatchDAO;
+import dao.SubjectDAO;
+import model.Enrollment;
+import model.Batch;
+import model.Subject;
 
 public class StudentService {
 
-    private UserDAO userDAO;
-    private StudentDAO studentDAO;
+    private EnrollmentDAO enrollmentDAO;
+    private BatchDAO batchDAO;
+    private SubjectDAO subjectDAO;
 
     public StudentService() {
-        userDAO = new UserDAO();
-        studentDAO = new StudentDAO();
+        this.enrollmentDAO = new EnrollmentDAO();
+        this.batchDAO = new BatchDAO();
+        this.subjectDAO = new SubjectDAO();
     }
 
-    // Register student
-    public boolean registerStudent(Student student) {
+    private dao.StudentDAO studentDAO = new dao.StudentDAO();
 
-        boolean userCreated = userDAO.addUser(student);
+    /**
+     * Resolves student ID from User ID if necessary
+     */
+    private String resolveStudentId(String id) {
+        if (id == null) return null;
+        if (id.startsWith("S")) return id; // Already a student ID
+        
+        System.out.println("User ID: " + id);
+        // Try to find student by user_id
+        model.Student s = studentDAO.getStudentByUserId(id);
+        String studentId = (s != null) ? s.getUserId() : id;
+        System.out.println("Mapped Student ID: " + studentId);
+        
+        return studentId;
+    }
 
-        if (userCreated) {
-            return studentDAO.addStudent(student);
+    /**
+     * Common method to get all active enrollments for a student
+     */
+    public List<Enrollment> getActiveEnrollments(String inputId) {
+        String studentId = resolveStudentId(inputId);
+        System.out.println("[StudentService] Fetching enrollments for: " + studentId);
+        List<Enrollment> enrollments = enrollmentDAO.getEnrollmentsByStudentId(studentId);
+        System.out.println("[StudentService] Enrollments found: " + (enrollments != null ? enrollments.size() : 0));
+        return enrollments;
+    }
+
+    /**
+     * Get batches for active enrollments
+     */
+    public List<Batch> getActiveBatches(String inputId) {
+        String studentId = resolveStudentId(inputId);
+        List<Enrollment> enrollments = getActiveEnrollments(studentId);
+        List<Batch> batches = new ArrayList<>();
+        
+        if (enrollments != null) {
+            for (Enrollment e : enrollments) {
+                Batch b = batchDAO.getBatchById(e.getBatchId());
+                if (b != null) {
+                    batches.add(b);
+                }
+            }
         }
-
-        return false;
-    }
-
-    // Get student
-    public Student getStudent(String userId) {
-        return studentDAO.getStudentById(userId);
-    }
-
-    // Delete student
-    public boolean deleteStudent(String userId) {
-
-        boolean studentDeleted = studentDAO.deleteStudent(userId);
-
-        if (studentDeleted) {
-            return userDAO.deleteUser(userId);
-        }
-
-        return false;
-    }
-
-    // Get all students
-    public List<Student> getAllStudents() {
-        return studentDAO.getAllStudents();
+        return batches;
     }
 }

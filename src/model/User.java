@@ -1,6 +1,7 @@
 package model;
 
 import java.util.Date;
+import java.util.List;
 
 public class User {
 
@@ -8,7 +9,8 @@ public class User {
     private String name;
     private String email;
     private String password;
-    private String role;
+    private String role;  // Primary role for backwards compatibility
+    private List<String> roles;  // Array of all roles from MongoDB
     private String address;
     private String phone;
     private Date createdAt;
@@ -103,5 +105,27 @@ public class User {
 
     public void setPhone(String phone) {
         this.phone = phone;
+    }
+
+    // ✅ Roles (Array/List) - NEW METHODS
+    public List<String> getRoles() {
+        return roles;
+    }
+
+    public void setRoles(List<String> roles) {
+        this.roles = roles;
+    }
+
+    // Check if user has a specific role (case-insensitive)
+    public boolean hasRole(String roleToCheck) {
+        if (roles == null || roles.isEmpty()) {
+            return false;
+        }
+        for (String r : roles) {
+            if (r != null && r.equalsIgnoreCase(roleToCheck)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -1,16 +1,42 @@
 package ui.admin;
 
-import javax.swing.*;
-import javax.swing.border.*;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.Frame;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.GridLayout;
+import java.awt.RenderingHints;
+import java.text.SimpleDateFormat;
+import java.util.List;
+
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JComponent;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPasswordField;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
+import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
+import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
-import javax.swing.text.*;
-import java.awt.*;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.List;
-import dao.TeacherDAO;
+import javax.swing.text.AbstractDocument;
+import javax.swing.text.AttributeSet;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.DocumentFilter;
+
 import dao.CounterDAO;
+import dao.TeacherDAO;
 import dao.UserDAO;
 import model.Teacher;
 import model.User;
@@ -29,7 +55,7 @@ public class TeacherManagementFrame extends JPanel {
     private JTable teacherTable;
     private DefaultTableModel model;
     private List<Teacher> currentTeachers;
-    private static final SimpleDateFormat DATE_FMT = new SimpleDateFormat("dd-MM-yyyy");
+    private static final SimpleDateFormat DATE_FMT = new SimpleDateFormat("dd-MMM-yyyy");
 
     public TeacherManagementFrame() {
         setLayout(new BorderLayout());
@@ -122,16 +148,11 @@ public class TeacherManagementFrame extends JPanel {
     private void refreshTable() {
         model.setRowCount(0);
         currentTeachers = new TeacherDAO().getAllTeachers();
-        UserDAO userDAO = new UserDAO();
         for (Teacher t : currentTeachers) {
             java.util.Date joinDateRaw = t.getJoinDate();
-            if (joinDateRaw == null && t.getEmail() != null)
-                joinDateRaw = userDAO.getCreatedAtByEmail(t.getEmail());
-            if (joinDateRaw == null)
-                joinDateRaw = userDAO.getCreatedAt(t.getUserId());
             String city    = t.getCity()   != null ? t.getCity()                  : "—";
             String joinStr = joinDateRaw   != null ? DATE_FMT.format(joinDateRaw) : "—";
-            String name    = t.getName()   != null ? t.getName() + " (#" + t.getUserId() + ")"
+            String name    = t.getName()   != null ? t.getName()
                                                    : "Unspecified (#" + t.getUserId() + ")";
             model.addRow(new Object[]{name, t.getSpecialization(), city, joinStr, ""});
         }

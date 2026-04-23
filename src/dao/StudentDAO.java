@@ -55,12 +55,48 @@ public class StudentDAO {
         return null;
     }
 
-    // Look up student strictly by the 'user_id' field (e.g., "U01" from enrollments)
+    // Robust mapping: user_id (U01) -> Student object (S001)
     public Student getStudentByUserId(String userIdValue) {
+        if (studentCollection == null || userIdValue == null) return null;
+        try {
+            System.out.println("[StudentDAO] Attempting to map User ID: " + userIdValue);
+            
+            // 1. Try exact match on 'user_id' field
+            Document doc = studentCollection.find(Filters.eq("user_id", userIdValue)).first();
+            
+            // 2. Try match on email (most reliable)
+            if (doc == null) {
+                UserDAO userDAO = new UserDAO();
+                model.User user = userDAO.getUserById(userIdValue);
+                if (user != null && user.getEmail() != null) {
+                    System.out.println("[StudentDAO] Searching by email: " + user.getEmail());
+                    doc = studentCollection.find(Filters.eq("email", user.getEmail())).first();
+                }
+            }
+
+            // 3. Fallback: Check if the provided ID is already the Student ID (_id)
+            if (doc == null && userIdValue.startsWith("S")) {
+                doc = studentCollection.find(Filters.eq("_id", userIdValue)).first();
+            }
+
+            Student s = DocumentMapper.documentToStudent(doc);
+            if (s != null) {
+                System.out.println("[StudentDAO] ✅ Mapped " + userIdValue + " to Student " + s.getUserId());
+            } else {
+                System.out.println("[StudentDAO] ❌ Failed to map User ID: " + userIdValue);
+            }
+            return s;
+        } catch (Exception e) {
+            System.err.println("[StudentDAO] Error mapping user to student: " + e.getMessage());
+        }
+        return null;
+    }
+
+    public Student getStudentByEmail(String email) {
         if (studentCollection == null) return null;
         try {
             Document doc = studentCollection.find(
-                Filters.eq("user_id", userIdValue)
+                Filters.eq("email", email)
             ).first();
             return DocumentMapper.documentToStudent(doc);
         } catch (Exception e) {

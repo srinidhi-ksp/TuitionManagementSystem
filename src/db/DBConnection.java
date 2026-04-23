@@ -19,18 +19,28 @@ public class DBConnection {
             synchronized (DBConnection.class) {
                 if (mongoClient == null) {
                     try {
+                        System.out.println("[DBConnection] Attempting to connect to MongoDB at: " + CONNECTION_STRING);
                         mongoClient = MongoClients.create(CONNECTION_STRING);
-                        System.out.println("MongoDB Connected Successfully to: " + DATABASE_NAME);
+                        
+                        // Verify connection with a ping
+                        MongoDatabase database = mongoClient.getDatabase(DATABASE_NAME);
+                        database.runCommand(new org.bson.Document("ping", 1));
+                        
+                        System.out.println("[DBConnection] MongoDB Connected Successfully to database: " + DATABASE_NAME);
                         
                         // Option: create initial indexes here or in DAO
                     } catch (Exception e) {
-                        System.err.println("Database Connection Failed.");
+                        System.err.println("[DBConnection] Database Connection Failed!");
                         e.printStackTrace();
+                        mongoClient = null; // Reset on failure
                     }
                 }
             }
         }
-        return mongoClient.getDatabase(DATABASE_NAME);
+        if (mongoClient != null) {
+            return mongoClient.getDatabase(DATABASE_NAME);
+        }
+        return null;
     }
     
     // Optional utility to close the connection on shutdown

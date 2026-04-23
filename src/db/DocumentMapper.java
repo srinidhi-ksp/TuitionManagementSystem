@@ -2,11 +2,13 @@ package db;
 
 import java.util.ArrayList;
 import java.util.List;
+
 import org.bson.Document;
-import model.User;
-import model.Student;
+
 import model.Parent;
+import model.Student;
 import model.Teacher;
+import model.User;
 
 public class DocumentMapper {
 
@@ -14,29 +16,46 @@ public class DocumentMapper {
     // USER MAPPER
     // ====================================
     public static User documentToUser(Document doc) {
-        if (doc == null) return null;
+        if (doc == null) {
+            System.err.println("[DocumentMapper] Document is null!");
+            return null;
+        }
+        
         User user = new User();
-        user.setUserId(doc.getString("_id"));
+        String userId = doc.getString("_id");
+        user.setUserId(userId);
+        System.out.println("[DocumentMapper] Mapping user: " + userId);
+        
         user.setEmail(doc.getString("email"));
         user.setPassword(doc.getString("password"));
         
+        // ✅ Get roles as a List (ARRAY from MongoDB)
         List<String> roles = doc.getList("roles", String.class);
-        System.out.println("[DocumentMapper] User '" + user.getUserId() + "' roles from DB: " + roles);
+        System.out.println("[DocumentMapper] Raw roles array from DB: " + roles);
+        
         if (roles != null && !roles.isEmpty()) {
-            // Prefer ADMIN role if present (since admin users may have multiple roles)
-            String chosenRole = roles.get(0);
+            // Store the complete roles array
+            user.setRoles(roles);
+            
+            // Set primary role: prefer ADMIN if present, otherwise first role
+            String primaryRole = roles.get(0);
             for (String r : roles) {
                 if (r != null && r.equalsIgnoreCase("admin")) {
-                    chosenRole = r;
+                    primaryRole = r;
                     break;
                 }
             }
-            user.setRole(chosenRole);
+            user.setRole(primaryRole);
+            System.out.println("[DocumentMapper] Roles stored: " + roles);
+            System.out.println("[DocumentMapper] Primary role set to: '" + primaryRole + "'");
         } else {
+            System.err.println("[DocumentMapper] ⚠️  No roles found for user!");
             user.setRole("Unknown");
+            user.setRoles(new ArrayList<>());
         }
         
         user.setCreatedAt(doc.getDate("created_at"));
+        System.out.println("[DocumentMapper] ✅ User mapped successfully!");
         return user;
     }
 
@@ -325,6 +344,21 @@ public class DocumentMapper {
 
         b.setMeetingLink(doc.getString("meeting_link"));
         b.setClassMode(doc.getString("class_mode"));
+        b.setCategory(doc.getString("category"));
+        b.setStatus(doc.getString("status"));
+        if (b.getStatus() == null) b.setStatus("ACTIVE"); // Default
+
+        // Read dedicated 'standard' field; derive from category as fallback
+        String std = doc.getString("standard");
+        if (std == null && b.getCategory() != null) {
+            String cat = b.getCategory().trim();
+            if (cat.toLowerCase().startsWith("class ")) {
+                std = cat.substring(6).trim(); // "Class 12" → "12"
+            } else {
+                std = cat; // Already a plain number
+            }
+        }
+        b.setStandard(std);
         return b;
     }
 
@@ -338,6 +372,9 @@ public class DocumentMapper {
         doc.append("end_time",    batch.getEndTime());
         doc.append("meeting_link",batch.getMeetingLink());
         doc.append("class_mode",  batch.getClassMode());
+        doc.append("category",    batch.getCategory());
+        doc.append("standard",    batch.getStandard());
+        doc.append("status",      batch.getStatus() != null ? batch.getStatus() : "ACTIVE");
         // Persist timing string to DB for direct retrieval
         if (batch.getTiming() != null) {
             doc.append("timing", batch.getTiming());
@@ -522,9 +559,13 @@ public class DocumentMapper {
         t.setTestDate(doc.getDate("test_date"));
         if (t.getTestDate() == null) t.setTestDate(doc.getDate("date"));
         
-        Object maxObj = doc.get("max_marks");
+        Object maxObj = doc.get("total_marks"); // Use total_marks as per new requirement
+        if (maxObj == null) maxObj = doc.get("max_marks");
         if (maxObj instanceof Number) t.setMaxMarks(((Number) maxObj).intValue());
         else if (maxObj != null) try { t.setMaxMarks(Integer.parseInt(maxObj.toString())); } catch (Exception ex) {}
+        
+        // Handle attempts (raw documents for processing in service)
+        t.setAttempts(doc.getList("attempts", Document.class));
         
         return t;
     }

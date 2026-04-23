@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-cd /d c:\Users\srini\Documents\workspace\tutionms
+cd /d "%~dp0"
 setlocal enabledelayedexpansion
 
 set "CLASSPATH=lib\*"
@@ -13,8 +13,10 @@ javac -encoding UTF-8 -d bin -cp "%CLASSPATH%" %SOURCE_17% %TARGET_17% ^
   src\db\*.java ^
   src\model\*.java ^
   src\service\*.java ^
+  src\util\*.java ^
   src\ui\*.java ^
   src\ui\admin\*.java ^
+  src\ui\parent\*.java ^
   src\ui\student\*.java ^
   src\ui\teacher\*.java
   

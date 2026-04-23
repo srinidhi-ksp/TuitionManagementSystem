@@ -12,6 +12,7 @@ import dao.TeacherDAO;
 import model.Batch;
 import model.Subject;
 import model.Teacher;
+import util.BatchFormValidator;
 
 public class BatchManagementFrame extends JPanel {
 
@@ -146,11 +147,13 @@ public class BatchManagementFrame extends JPanel {
         TimeChooser endPicker   = new TimeChooser();
         JTextField linkField  = styledField();
         JComboBox<String> modeCombo = new JComboBox<>(new String[]{"Online", "Offline"});
+        JComboBox<String> classLevelCombo = new JComboBox<>(new String[]{"Class 10", "Class 11", "Class 12"});
 
         if (isEditMode) {
             nameField.setText(editTarget.getBatchName());
             linkField.setText(editTarget.getMeetingLink());
             modeCombo.setSelectedItem(editTarget.getClassMode());
+            classLevelCombo.setSelectedItem(editTarget.getCategory());
             // Pre-select combos
             for (int i=0; i<subjectCombo.getItemCount(); i++)
                 if (subjectCombo.getItemAt(i).startsWith(editTarget.getSubjectId() + " –")) subjectCombo.setSelectedIndex(i);
@@ -165,6 +168,7 @@ public class BatchManagementFrame extends JPanel {
         }
 
         form.add(formRow("Batch Name",          nameField));
+        form.add(formRow("Class/Standard",      classLevelCombo));
         form.add(formRow("Subject",             subjectCombo));
         form.add(formRow("Assigned Teacher",    teacherCombo));
         form.add(formRow("Class Mode",          modeCombo));
@@ -178,9 +182,28 @@ public class BatchManagementFrame extends JPanel {
         String btnText = isEditMode ? "Update Batch" : "Save Batch";
         btnRow.add(makeAccentButton(btnText, e -> {
             try {
+                // ===== VALIDATE FORM =====
+                String validationError = BatchFormValidator.validateBatchForm(
+                    nameField.getText(),
+                    classLevelCombo,
+                    subjectCombo,
+                    teacherCombo,
+                    modeCombo,
+                    startPicker.getTime(),
+                    endPicker.getTime(),
+                    linkField.getText()
+                );
+
+                if (validationError != null) {
+                    BatchFormValidator.showError(dialog, validationError);
+                    return; // Stop saving if validation fails
+                }
+
+                // ===== VALIDATION PASSED - SAVE DATA =====
                 Batch b = isEditMode ? editTarget : new Batch();
                 if (!isEditMode) b.setBatchId((int)(System.currentTimeMillis() % 100000));
                 b.setBatchName(nameField.getText().trim());
+                b.setCategory(classLevelCombo.getSelectedItem().toString());
 
                 String selS = subjectCombo.getSelectedItem().toString();
                 if (selS.contains(" – ")) b.setSubjectId(Integer.parseInt(selS.split(" – ")[0]));
@@ -195,11 +218,11 @@ public class BatchManagementFrame extends JPanel {
 
                 boolean ok = isEditMode ? new BatchDAO().updateBatch(b) : new BatchDAO().addBatch(b);
                 if (ok) {
-                    JOptionPane.showMessageDialog(dialog, "Batch Saved!");
+                    JOptionPane.showMessageDialog(dialog, "✅ Batch " + (isEditMode ? "updated" : "saved") + " successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
                     refreshTable(); dialog.dispose();
-                } else JOptionPane.showMessageDialog(dialog, "Failed to save.");
+                } else JOptionPane.showMessageDialog(dialog, "Failed to save batch.", "Error", JOptionPane.ERROR_MESSAGE);
             } catch (Exception ex) {
-                JOptionPane.showMessageDialog(dialog, "Error: " + ex.getMessage());
+                JOptionPane.showMessageDialog(dialog, "Error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
         }));
 
