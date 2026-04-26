@@ -1,33 +1,40 @@
 package model;
 
 /**
- * DTO for Subject Fee Details
- * Contains subject information, fee amount, and payment status
+ * DTO for Fee Management
+ * Represents a subject with its fee and payment status
  */
 public class SubjectFeeDTO {
-    private int subjectId;
+    private String subjectId;
     private String subjectName;
     private double monthlyFee;
-    private String paymentStatus; // PAID, UNPAID
-    
-    // Constructor
-    public SubjectFeeDTO(int subjectId, String subjectName, double monthlyFee, String paymentStatus) {
+    private String paymentStatus;  // PAID, UNPAID
+    private int batchId;
+
+    // Constructors
+    public SubjectFeeDTO() {}
+
+    public SubjectFeeDTO(String subjectId, String subjectName, double monthlyFee, String paymentStatus) {
         this.subjectId = subjectId;
         this.subjectName = subjectName;
         this.monthlyFee = monthlyFee;
         this.paymentStatus = paymentStatus;
     }
 
-    // Default Constructor
-    public SubjectFeeDTO() {
+    public SubjectFeeDTO(String subjectId, String subjectName, double monthlyFee, String paymentStatus, int batchId) {
+        this.subjectId = subjectId;
+        this.subjectName = subjectName;
+        this.monthlyFee = monthlyFee;
+        this.paymentStatus = paymentStatus;
+        this.batchId = batchId;
     }
 
-    // Getters and Setters
-    public int getSubjectId() {
+    // Getters & Setters
+    public String getSubjectId() {
         return subjectId;
     }
 
-    public void setSubjectId(int subjectId) {
+    public void setSubjectId(String subjectId) {
         this.subjectId = subjectId;
     }
 
@@ -55,11 +62,22 @@ public class SubjectFeeDTO {
         this.paymentStatus = paymentStatus;
     }
 
+    public int getBatchId() {
+        return batchId;
+    }
+
+    public void setBatchId(int batchId) {
+        this.batchId = batchId;
+    }
+
     @Override
     public String toString() {
-        return "SubjectFeeDTO [subjectId=" + subjectId + 
-               ", subjectName=" + subjectName + 
-               ", monthlyFee=" + monthlyFee + 
-               ", paymentStatus=" + paymentStatus + "]";
+        return "SubjectFeeDTO{" +
+                "subjectId='" + subjectId + '\'' +
+                ", subjectName='" + subjectName + '\'' +
+                ", monthlyFee=" + monthlyFee +
+                ", paymentStatus='" + paymentStatus + '\'' +
+                ", batchId=" + batchId +
+                '}';
     }
 }

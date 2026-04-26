@@ -1,11 +1,34 @@
 package ui.student;
 
-import javax.swing.*;
-import javax.swing.border.EmptyBorder;
-import javax.swing.table.DefaultTableModel;
-import javax.swing.table.TableCellRenderer;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.Frame;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.GridLayout;
+import java.awt.RenderingHints;
 import java.util.List;
+import java.util.Map;
+
+import javax.swing.AbstractCellEditor;
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
+import javax.swing.border.EmptyBorder;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableCellEditor;
+import javax.swing.table.TableCellRenderer;
 
 import model.SubjectFeeDTO;
 import service.FeeService;
@@ -18,166 +41,269 @@ import util.SessionManager;
  */
 public class FeesPanel extends JPanel {
 
+    private static final Color PAGE_BG     = new Color(244, 247, 249);
+    private static final Color CARD_BG     = Color.WHITE;
+    private static final Color TEXT_PRI    = new Color(26, 35, 64);
+    private static final Color TEXT_SEC    = new Color(107, 122, 153);
+    private static final Color ACCENT      = new Color(74, 144, 226);
+    private static final Color SUCCESS_GREEN = new Color(52, 211, 153);
+    private static final Color WARNING_ORANGE = new Color(251, 146, 60);
+    private static final Color ERROR_RED   = new Color(248, 113, 113);
+
+    private JTable feesTable;
     private DefaultTableModel tableModel;
-    private JPanel statsPanel;
-    private JTable feeTable;
     private FeeService feeService;
-    
-    private static final Color PAID_COLOR = new Color(76, 175, 80);
-    private static final Color UNPAID_COLOR = new Color(244, 67, 54);
-    private static final Color TABLE_HEADER_BG = new Color(41, 57, 86);
+
+    private JLabel totalFeeCard;
+    private JLabel paidAmountCard;
+    private JLabel pendingAmountCard;
+    private JLabel statusCard;
 
     public FeesPanel() {
-        setLayout(new BorderLayout());
-        setBackground(Color.WHITE);
-        setBorder(new EmptyBorder(30, 40, 30, 40));
-
-        feeService = new FeeService();
-
-        // Header
-        JPanel headerPanel = createHeaderPanel();
-        add(headerPanel, BorderLayout.NORTH);
-
-        // Stats Cards
-        JPanel statsAndTablePanel = new JPanel(new BorderLayout());
-        statsAndTablePanel.setBackground(Color.WHITE);
+        this.feeService = new FeeService();
         
-        statsPanel = new JPanel(new GridLayout(1, 4, 20, 0));
-        statsPanel.setBackground(Color.WHITE);
-        statsPanel.setBorder(new EmptyBorder(0, 0, 30, 0));
-        statsAndTablePanel.add(statsPanel, BorderLayout.NORTH);
+        setLayout(new BorderLayout(0, 24));
+        setBackground(PAGE_BG);
+        setBorder(new EmptyBorder(32, 36, 32, 36));
 
-        // Table for subject fees
-        JPanel tablePanel = createTablePanel();
-        statsAndTablePanel.add(tablePanel, BorderLayout.CENTER);
+        add(createHeader(), BorderLayout.NORTH);
+        add(createContent(), BorderLayout.CENTER);
 
-        add(statsAndTablePanel, BorderLayout.CENTER);
-
-        loadDataAsync();
+        loadData();
     }
 
-    private JPanel createHeaderPanel() {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBackground(Color.WHITE);
-        panel.setBorder(new EmptyBorder(0, 0, 20, 0));
+    private JPanel createHeader() {
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBackground(PAGE_BG);
 
-        JLabel title = new JLabel("Fees & Payments");
-        title.setFont(new Font("Arial", Font.BOLD, 24));
-        title.setForeground(new Color(26, 35, 64));
+        JPanel titlePanel = new JPanel(new GridLayout(2, 1, 0, 4));
+        titlePanel.setBackground(PAGE_BG);
+        JLabel title = new JLabel("My Fees & Payments");
+        title.setFont(new Font("SansSerif", Font.BOLD, 26));
+        title.setForeground(TEXT_PRI);
+        JLabel sub = new JLabel("View your fee breakdown and payment status");
+        sub.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        sub.setForeground(TEXT_SEC);
+        titlePanel.add(title);
+        titlePanel.add(sub);
 
-        JLabel subtitle = new JLabel("View your subject-wise fees and payment status");
-        subtitle.setFont(new Font("Arial", Font.PLAIN, 13));
-        subtitle.setForeground(new Color(107, 122, 153));
+        JButton refreshBtn = new JButton("↻ Refresh");
+        refreshBtn.setFont(new Font("SansSerif", Font.BOLD, 12));
+        refreshBtn.setBackground(Color.WHITE);
+        refreshBtn.setFocusPainted(false);
+        refreshBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        refreshBtn.addActionListener(e -> loadData());
 
-        JPanel textPanel = new JPanel(new GridLayout(2, 1, 0, 5));
-        textPanel.setBackground(Color.WHITE);
-        textPanel.add(title);
-        textPanel.add(subtitle);
-
-        panel.add(textPanel, BorderLayout.WEST);
-        return panel;
+        header.add(titlePanel, BorderLayout.WEST);
+        header.add(refreshBtn, BorderLayout.EAST);
+        return header;
     }
 
-    private JPanel createTablePanel() {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBackground(Color.WHITE);
-        panel.setBorder(BorderFactory.createLineBorder(new Color(220, 225, 240), 1, true));
+    private JPanel createContent() {
+        JPanel content = new JPanel(new BorderLayout(0, 24));
+        content.setBackground(PAGE_BG);
 
-        // Create table model with subject-wise fee details
-        String[] columns = {"Subject Name", "Monthly Fee", "Payment Status"};
-        tableModel = new DefaultTableModel(columns, 0) {
+        // Summary Cards
+        JPanel cardsPanel = new JPanel(new GridLayout(1, 4, 20, 0));
+        cardsPanel.setBackground(PAGE_BG);
+        
+        totalFeeCard = new JLabel("₹0.00", SwingConstants.CENTER);
+        paidAmountCard = new JLabel("₹0.00", SwingConstants.CENTER);
+        pendingAmountCard = new JLabel("₹0.00", SwingConstants.CENTER);
+        statusCard = new JLabel("—", SwingConstants.CENTER);
+
+        cardsPanel.add(createStatCard("Total Fees", totalFeeCard, ACCENT));
+        cardsPanel.add(createStatCard("Amount Paid", paidAmountCard, SUCCESS_GREEN));
+        cardsPanel.add(createStatCard("Pending Balance", pendingAmountCard, WARNING_ORANGE));
+        cardsPanel.add(createStatCard("Overall Status", statusCard, ERROR_RED));
+
+        // Table Panel
+        JPanel tableCard = new JPanel(new BorderLayout());
+        tableCard.setBackground(CARD_BG);
+        tableCard.setBorder(BorderFactory.createLineBorder(new Color(230, 235, 245), 1, true));
+
+        String[] cols = {"Subject Name", "Monthly Fee", "Payment Status", "Action", "subjectId"};
+        tableModel = new DefaultTableModel(cols, 0) {
+            @Override public boolean isCellEditable(int r, int c) { return c == 3; }
+        };
+        feesTable = new JTable(tableModel);
+        styleTable(feesTable);
+        
+        // Hide subjectId column
+        feesTable.getColumnModel().getColumn(4).setMinWidth(0);
+        feesTable.getColumnModel().getColumn(4).setMaxWidth(0);
+        feesTable.getColumnModel().getColumn(4).setPreferredWidth(0);
+
+        JScrollPane scroll = new JScrollPane(feesTable);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.getViewport().setBackground(CARD_BG);
+
+        tableCard.add(scroll, BorderLayout.CENTER);
+
+        content.add(cardsPanel, BorderLayout.NORTH);
+        content.add(tableCard, BorderLayout.CENTER);
+        return content;
+    }
+
+    private JPanel createStatCard(String title, JLabel valueLabel, Color accent) {
+        JPanel card = new JPanel(new BorderLayout(0, 8)) {
             @Override
-            public boolean isCellEditable(int row, int column) {
-                return false; // Read-only for students
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(CARD_BG);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16);
+                g2.setColor(accent);
+                g2.fillRect(0, 0, 4, getHeight());
+                g2.dispose();
             }
         };
+        card.setBackground(CARD_BG);
+        card.setBorder(new EmptyBorder(20, 24, 20, 24));
 
-        feeTable = new JTable(tableModel);
-        feeTable.setRowHeight(45);
-        feeTable.setFont(new Font("Arial", Font.PLAIN, 12));
-        feeTable.setGridColor(new Color(230, 230, 230));
-        feeTable.setShowGrid(true);
-        feeTable.setShowHorizontalLines(true);
-        feeTable.setShowVerticalLines(false);
-        feeTable.setIntercellSpacing(new Dimension(1, 1));
+        JLabel titleLbl = new JLabel(title.toUpperCase());
+        titleLbl.setFont(new Font("SansSerif", Font.BOLD, 10));
+        titleLbl.setForeground(TEXT_SEC);
 
-        // Set column widths
-        feeTable.getColumnModel().getColumn(0).setPreferredWidth(200);
-        feeTable.getColumnModel().getColumn(1).setPreferredWidth(120);
-        feeTable.getColumnModel().getColumn(2).setPreferredWidth(150);
+        valueLabel.setFont(new Font("SansSerif", Font.BOLD, 22));
+        valueLabel.setForeground(TEXT_PRI);
+        valueLabel.setHorizontalAlignment(SwingConstants.LEFT);
 
-        // Set header styling
-        feeTable.getTableHeader().setBackground(TABLE_HEADER_BG);
-        feeTable.getTableHeader().setForeground(Color.WHITE);
-        feeTable.getTableHeader().setFont(new Font("Arial", Font.BOLD, 12));
-        feeTable.getTableHeader().setPreferredSize(new Dimension(0, 40));
-
-        // Add custom renderer for status column
-        feeTable.getColumnModel().getColumn(2).setCellRenderer(new StatusCellRenderer());
-
-        JScrollPane scrollPane = new JScrollPane(feeTable);
-        scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        scrollPane.getViewport().setBackground(Color.WHITE);
-
-        panel.add(scrollPane, BorderLayout.CENTER);
-        return panel;
-    }
-
-    private JPanel createModernStatCard(String title, String value, Color bgColor) {
-        JPanel card = new JPanel(new BorderLayout());
-        card.setBackground(Color.WHITE);
-        card.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(new Color(230, 230, 230), 1, true),
-            new EmptyBorder(20, 20, 20, 20)
-        ));
-
-        JPanel contentPanel = new JPanel(new GridLayout(2, 1, 0, 8));
-        contentPanel.setBackground(Color.WHITE);
-
-        JLabel titleLabel = new JLabel(title);
-        titleLabel.setFont(new Font("Arial", Font.PLAIN, 12));
-        titleLabel.setForeground(new Color(107, 122, 153));
-
-        JLabel valueLabel = new JLabel(value);
-        valueLabel.setFont(new Font("Arial", Font.BOLD, 20));
-        valueLabel.setForeground(new Color(26, 35, 64));
-
-        contentPanel.add(titleLabel);
-        contentPanel.add(valueLabel);
-
-        card.add(contentPanel, BorderLayout.CENTER);
+        card.add(titleLbl, BorderLayout.NORTH);
+        card.add(valueLabel, BorderLayout.CENTER);
         return card;
     }
 
-    private void loadDataAsync() {
-        statsPanel.removeAll();
-        statsPanel.add(createModernStatCard("Total Fees", "Loading...", new Color(100, 150, 255)));
-        tableModel.setRowCount(0);
-        tableModel.addRow(new Object[]{"Loading...", "", ""});
+    private void styleTable(JTable t) {
+        t.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        t.setRowHeight(50);
+        t.setShowGrid(false);
+        t.setShowHorizontalLines(true);
+        t.setGridColor(new Color(240, 242, 245));
+        t.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 12));
+        t.getTableHeader().setBackground(new Color(250, 251, 253));
+        t.getTableHeader().setForeground(TEXT_SEC);
+        t.getTableHeader().setPreferredSize(new Dimension(0, 40));
+        
+        DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+                Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                if (column == 2) {
+                    if ("PAID".equals(value)) {
+                        setForeground(SUCCESS_GREEN);
+                        setFont(getFont().deriveFont(Font.BOLD));
+                    } else {
+                        setForeground(ERROR_RED);
+                        setFont(getFont().deriveFont(Font.BOLD));
+                    }
+                } else {
+                    setForeground(TEXT_PRI);
+                }
+                setBackground(isSelected ? new Color(245, 247, 255) : CARD_BG);
+                setBorder(new EmptyBorder(0, 20, 0, 20));
+                return c;
+            }
+        };
+        
+        for (int i = 0; i < 3; i++) t.getColumnModel().getColumn(i).setCellRenderer(centerRenderer);
+        
+        t.getColumnModel().getColumn(3).setCellRenderer(new ButtonRenderer());
+        t.getColumnModel().getColumn(3).setCellEditor(new ButtonEditor());
+    }
 
-        new SwingWorker<Void, Void>() {
+    private class ButtonRenderer extends JButton implements TableCellRenderer {
+        public ButtonRenderer() {
+            setOpaque(true);
+            setBorderPainted(false);
+            setContentAreaFilled(false);
+            setCursor(new Cursor(Cursor.HAND_CURSOR));
+            setFont(new Font("SansSerif", Font.BOLD, 12));
+        }
+        @Override public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int col) {
+            String status = (String) table.getValueAt(row, 2);
+            if ("PAID".equals(status)) {
+                setText("Generate Receipt");
+                setForeground(ACCENT);
+                setEnabled(true);
+            } else {
+                setText("-");
+                setForeground(TEXT_SEC);
+                setEnabled(false);
+            }
+            return this;
+        }
+    }
+
+    private class ButtonEditor extends AbstractCellEditor implements TableCellEditor {
+        private JButton button;
+        private String subjectId;
+        private int row;
+
+        public ButtonEditor() {
+            button = new JButton();
+            button.setFont(new Font("SansSerif", Font.BOLD, 12));
+            button.addActionListener(e -> {
+                row = feesTable.getEditingRow();
+                if (row == -1) return;
+                subjectId = (String) tableModel.getValueAt(row, 4);
+                String studentId = SessionManager.getInstance().getUserId();
+                
+                String receipt = feeService.generateReceiptString(studentId, subjectId);
+                if (receipt != null) {
+                    JOptionPane.showMessageDialog(FeesPanel.this, receipt, "Payment Receipt", JOptionPane.INFORMATION_MESSAGE);
+                } else {
+                    JOptionPane.showMessageDialog(FeesPanel.this, "Error generating receipt.", "Error", JOptionPane.ERROR_MESSAGE);
+                }
+                fireEditingStopped();
+            });
+        }
+
+        @Override public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int r, int c) {
+            String status = (String) table.getValueAt(r, 2);
+            if ("PAID".equals(status)) {
+                button.setText("Generate Receipt");
+                button.setForeground(ACCENT);
+                button.setEnabled(true);
+            } else {
+                button.setText("-");
+                button.setForeground(TEXT_SEC);
+                button.setEnabled(false);
+            }
+            return button;
+        }
+        @Override public Object getCellEditorValue() { return button.getText(); }
+    }
+
+    private void loadData() {
+        String userIdFromSession = SessionManager.getInstance().getUserId();
+        if (userIdFromSession == null) {
+            System.err.println("[FeesPanel] ❌ User ID is null in session!");
+            return;
+        }
+
+        System.out.println("[FeesPanel] 🔄 Starting loadData...");
+        System.out.println("[FeesPanel] User ID from session: " + userIdFromSession);
+
+        new javax.swing.SwingWorker<Void, Void>() {
+            List<SubjectFeeDTO> fees;
+            Map<String, Object> summary;
+
             @Override
             protected Void doInBackground() throws Exception {
-                String userId = SessionManager.getInstance().getUserId();
-                if (userId == null || userId.isEmpty()) {
-                    System.err.println("[FeesPanel] No user ID from SessionManager");
-                    return null;
+                // FeeService will internally resolve user_id → student_id
+                System.out.println("[FeesPanel] Calling feeService.getStudentFeeDetails()...");
+                fees = feeService.getStudentFeeDetails(userIdFromSession);
+                
+                System.out.println("[FeesPanel] Calling feeService.getFeeSummary()...");
+                summary = feeService.getFeeSummary(userIdFromSession);
+                
+                System.out.println("[FeesPanel] 📊 Summary: " + (summary != null ? "OK" : "NULL"));
+                if (summary != null) {
+                    System.out.println("[FeesPanel]   - Status: " + summary.get("status"));
+                    System.out.println("[FeesPanel]   - Total Fee: " + summary.get("totalFee"));
+                    System.out.println("[FeesPanel]   - Fees count: " + (fees != null ? fees.size() : 0));
                 }
-
-                System.out.println("[FeesPanel] Loading fees for student: " + userId);
-
-                // Get all data in background
-                List<SubjectFeeDTO> feeDetails = feeService.getStudentFeeDetails(userId);
-                double totalFee = feeService.calculateTotalFee(userId);
-                double paidAmount = feeService.calculatePaidAmount(userId);
-                double pendingAmount = feeService.calculatePendingAmount(userId);
-                String overallStatus = feeService.getOverallPaymentStatus(userId);
-
-                // Update UI on EDT
-                SwingUtilities.invokeLater(() -> {
-                    updateUI(feeDetails, totalFee, paidAmount, pendingAmount, overallStatus);
-                });
-
                 return null;
             }
 
@@ -185,13 +311,43 @@ public class FeesPanel extends JPanel {
             protected void done() {
                 try {
                     get();
+                    tableModel.setRowCount(0);
+                    if (summary != null) {
+                        totalFeeCard.setText(String.format("₹%.2f", (Double)summary.get("totalFee")));
+                        paidAmountCard.setText(String.format("₹%.2f", (Double)summary.get("paidAmount")));
+                        pendingAmountCard.setText(String.format("₹%.2f", (Double)summary.get("pendingAmount")));
+                        
+                        String status = (String) summary.get("status");
+                        statusCard.setText(status);
+                        statusCard.setForeground("PAID".equals(status) ? SUCCESS_GREEN : ERROR_RED);
+                        
+                        System.out.println("[FeesPanel] ✅ Status card updated: " + status);
+                    }
+
+                    if (fees != null && !fees.isEmpty()) {
+                        System.out.println("[FeesPanel] Populating table with " + fees.size() + " fee records");
+                        for (SubjectFeeDTO f : fees) {
+                            tableModel.addRow(new Object[]{
+                                f.getSubjectName(), 
+                                String.format("₹%.2f", f.getMonthlyFee()), 
+                                f.getPaymentStatus(),
+                                "Generate Receipt",
+                                f.getSubjectId()
+                            });
+                        }
+                    } else {
+                        System.out.println("[FeesPanel] ⚠️  No fees found - checking if this is enrollment issue...");
+                        // Only show "No Enrollment" if the mapping actually succeeded but no enrollments exist
+                        String statusMsg = summary != null ? (String) summary.get("status") : "UNKNOWN";
+                        if ("NO_ENROLLMENT".equals(statusMsg)) {
+                            tableModel.addRow(new Object[]{"No active enrollments found", "", "", "", ""});
+                        } else {
+                            tableModel.addRow(new Object[]{"Error: Unable to load fee data", "", "", "", ""});
+                        }
+                    }
                 } catch (Exception e) {
-                    System.err.println("[FeesPanel] Error loading data: " + e.getMessage());
+                    System.err.println("[FeesPanel] ❌ Error in loadData done(): " + e.getMessage());
                     e.printStackTrace();
-                    statsPanel.removeAll();
-                    statsPanel.add(createModernStatCard("Error", "Failed to load", new Color(255, 100, 100)));
-                    statsPanel.revalidate();
-                    statsPanel.repaint();
                 }
             }
         }.execute();
@@ -199,44 +355,7 @@ public class FeesPanel extends JPanel {
 
     private void updateUI(List<SubjectFeeDTO> feeDetails, double totalFee, 
                          double paidAmount, double pendingAmount, String overallStatus) {
-        // Update stat cards
-        statsPanel.removeAll();
-
-        statsPanel.add(createModernStatCard("Total Fees", String.format("Rs. %.2f", totalFee), new Color(100, 150, 255)));
-        statsPanel.add(createModernStatCard("Amount Paid", String.format("Rs. %.2f", paidAmount), new Color(76, 175, 80)));
-        statsPanel.add(createModernStatCard("Pending", String.format("Rs. %.2f", pendingAmount), new Color(244, 67, 54)));
-        
-        String statusDisplay = overallStatus;
-        Color statusColor = new Color(180, 100, 255);
-        if ("PAID".equalsIgnoreCase(overallStatus)) {
-            statusColor = PAID_COLOR;
-        } else if ("UNPAID".equalsIgnoreCase(overallStatus)) {
-            statusColor = UNPAID_COLOR;
-        }
-        statsPanel.add(createModernStatCard("Status", statusDisplay, statusColor));
-        
-        statsPanel.revalidate();
-        statsPanel.repaint();
-
-        // Update fee table
-        tableModel.setRowCount(0);
-
-        if (feeDetails != null && !feeDetails.isEmpty()) {
-            for (SubjectFeeDTO fee : feeDetails) {
-                Object[] row = {
-                    fee.getSubjectName(),
-                    String.format("Rs. %.2f", fee.getMonthlyFee()),
-                    fee.getPaymentStatus()
-                };
-                tableModel.addRow(row);
-            }
-        } else {
-            Object[] row = {"No subjects enrolled", "", ""};
-            tableModel.addRow(row);
-        }
-
-        feeTable.revalidate();
-        feeTable.repaint();
+        // This method is no longer used - data is loaded in SwingWorker
     }
 
     /**
@@ -255,11 +374,11 @@ public class FeesPanel extends JPanel {
             String status = value != null ? value.toString() : "UNPAID";
 
             if ("PAID".equalsIgnoreCase(status)) {
-                setBackground(PAID_COLOR);
+                setBackground(SUCCESS_GREEN);
                 setForeground(Color.WHITE);
                 setText("✓ PAID");
             } else if ("UNPAID".equalsIgnoreCase(status)) {
-                setBackground(UNPAID_COLOR);
+                setBackground(ERROR_RED);
                 setForeground(Color.WHITE);
                 setText("✗ UNPAID");
             } else {

@@ -94,7 +94,8 @@ public class MySubjectsPanel extends JPanel {
                 List<Subject> subjects = new java.util.ArrayList<>();
                 if (userId == null) return subjects;
 
-                List<Batch> enrolled = new EnrollmentDAO().getBatchesByStudentId(userId);
+                service.StudentService studentService = new service.StudentService();
+                List<Batch> enrolled = studentService.getActiveBatches(userId);
                 Set<Integer> subjectIds = new HashSet<>();
                 
                 if (enrolled != null) {

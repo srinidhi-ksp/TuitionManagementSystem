@@ -5,6 +5,7 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.util.Calendar;
 import java.util.List;
 import dao.BatchDAO;
 import dao.SubjectDAO;
@@ -12,6 +13,7 @@ import dao.TeacherDAO;
 import model.Batch;
 import model.Subject;
 import model.Teacher;
+import util.BatchFormValidator;
 
 public class BatchManagementFrame extends JPanel {
 
@@ -121,7 +123,7 @@ public class BatchManagementFrame extends JPanel {
         String title = isEditMode ? "Edit Batch — " + editTarget.getBatchName() : "Add New Batch";
 
         JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), title, true);
-        dialog.setSize(600, 520);
+        dialog.setSize(600, 560);
         dialog.setLocationRelativeTo(this);
         dialog.getContentPane().setBackground(CARD_BG);
         dialog.setLayout(new BorderLayout());
@@ -138,19 +140,24 @@ public class BatchManagementFrame extends JPanel {
 
         JComboBox<String> teacherCombo = new JComboBox<>();
         teacherCombo.addItem("Select Teacher");
-        for (Teacher t : new TeacherDAO().getAllTeachers())
+        // Always load ALL teachers as per requirement
+        for (Teacher t : new TeacherDAO().getAllTeachers()) {
             teacherCombo.addItem(t.getUserId() + " – " + (t.getName() != null ? t.getName() : t.getSpecialization()));
+        }
 
         JTextField nameField  = styledField();
         TimeChooser startPicker = new TimeChooser();
         TimeChooser endPicker   = new TimeChooser();
         JTextField linkField  = styledField();
-        JComboBox<String> modeCombo = new JComboBox<>(new String[]{"Online", "Offline"});
+        JComboBox<String> modeCombo = new JComboBox<>(new String[]{"Select Mode", "Online", "Offline"});
+        JComboBox<String> classLevelCombo = new JComboBox<>(new String[]{"Select Class", "Class 10", "Class 11", "Class 12"});
 
         if (isEditMode) {
             nameField.setText(editTarget.getBatchName());
             linkField.setText(editTarget.getMeetingLink());
             modeCombo.setSelectedItem(editTarget.getClassMode());
+            classLevelCombo.setSelectedItem(editTarget.getCategory());
+            
             // Pre-select combos
             for (int i=0; i<subjectCombo.getItemCount(); i++)
                 if (subjectCombo.getItemAt(i).startsWith(editTarget.getSubjectId() + " –")) subjectCombo.setSelectedIndex(i);
@@ -160,11 +167,16 @@ public class BatchManagementFrame extends JPanel {
             if (editTarget.getStartTime() != null) startPicker.setTime(editTarget.getStartTime());
             if (editTarget.getEndTime() != null) endPicker.setTime(editTarget.getEndTime());
         } else {
-            startPicker.setTime("09:00");
-            endPicker.setTime("11:00");
+            Calendar cal = Calendar.getInstance();
+            cal.set(Calendar.HOUR_OF_DAY, 9);
+            cal.set(Calendar.MINUTE, 0);
+            startPicker.setTime(cal.getTime());
+            cal.set(Calendar.HOUR_OF_DAY, 11);
+            endPicker.setTime(cal.getTime());
         }
 
         form.add(formRow("Batch Name",          nameField));
+        form.add(formRow("Class/Standard",      classLevelCombo));
         form.add(formRow("Subject",             subjectCombo));
         form.add(formRow("Assigned Teacher",    teacherCombo));
         form.add(formRow("Class Mode",          modeCombo));
@@ -178,9 +190,28 @@ public class BatchManagementFrame extends JPanel {
         String btnText = isEditMode ? "Update Batch" : "Save Batch";
         btnRow.add(makeAccentButton(btnText, e -> {
             try {
+                // ===== VALIDATE FORM =====
+                String validationError = BatchFormValidator.validateBatchForm(
+                    nameField.getText(),
+                    classLevelCombo,
+                    subjectCombo,
+                    teacherCombo,
+                    modeCombo,
+                    startPicker.getTime(),
+                    endPicker.getTime(),
+                    linkField.getText()
+                );
+
+                if (validationError != null) {
+                    BatchFormValidator.showError(dialog, validationError);
+                    return; // Stop saving if validation fails
+                }
+
+                // ===== VALIDATION PASSED - SAVE DATA =====
                 Batch b = isEditMode ? editTarget : new Batch();
                 if (!isEditMode) b.setBatchId((int)(System.currentTimeMillis() % 100000));
                 b.setBatchName(nameField.getText().trim());
+                b.setCategory(classLevelCombo.getSelectedItem().toString());
 
                 String selS = subjectCombo.getSelectedItem().toString();
                 if (selS.contains(" – ")) b.setSubjectId(Integer.parseInt(selS.split(" – ")[0]));
@@ -195,11 +226,11 @@ public class BatchManagementFrame extends JPanel {
 
                 boolean ok = isEditMode ? new BatchDAO().updateBatch(b) : new BatchDAO().addBatch(b);
                 if (ok) {
-                    JOptionPane.showMessageDialog(dialog, "Batch Saved!");
+                    JOptionPane.showMessageDialog(dialog, "✅ Batch " + (isEditMode ? "updated" : "saved") + " successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
                     refreshTable(); dialog.dispose();
-                } else JOptionPane.showMessageDialog(dialog, "Failed to save.");
+                } else JOptionPane.showMessageDialog(dialog, "Failed to save batch.", "Error", JOptionPane.ERROR_MESSAGE);
             } catch (Exception ex) {
-                JOptionPane.showMessageDialog(dialog, "Error: " + ex.getMessage());
+                JOptionPane.showMessageDialog(dialog, "Error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
         }));
 
@@ -207,6 +238,7 @@ public class BatchManagementFrame extends JPanel {
         dialog.add(btnRow, BorderLayout.SOUTH);
         dialog.setVisible(true);
     }
+
 
     private void styleTable(JTable t) {
         t.setFont(new Font("SansSerif", Font.PLAIN, 13));

@@ -6,8 +6,9 @@ public class Test {
     private int testId;
     private int batchId;
     private String testName;
-    private Date testDate;
+    private java.util.Date testDate;
     private int maxMarks;
+    private java.util.List<org.bson.Document> attempts;
 
     public int getTestId() { return testId; }
     public void setTestId(int testId) { this.testId = testId; }
@@ -18,9 +19,12 @@ public class Test {
     public String getTestName() { return testName; }
     public void setTestName(String testName) { this.testName = testName; }
 
-    public Date getTestDate() { return testDate; }
-    public void setTestDate(Date testDate) { this.testDate = testDate; }
+    public java.util.Date getTestDate() { return testDate; }
+    public void setTestDate(java.util.Date testDate) { this.testDate = testDate; }
 
     public int getMaxMarks() { return maxMarks; }
     public void setMaxMarks(int maxMarks) { this.maxMarks = maxMarks; }
+
+    public java.util.List<org.bson.Document> getAttempts() { return attempts; }
+    public void setAttempts(java.util.List<org.bson.Document> attempts) { this.attempts = attempts; }
 }

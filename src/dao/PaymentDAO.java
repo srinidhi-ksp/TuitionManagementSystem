@@ -1,31 +1,53 @@
 package dao;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Date;
-
 import org.bson.Document;
 import com.mongodb.client.MongoCollection;
-import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
-import com.mongodb.client.model.Sorts;
-
-import model.Payment;
 import db.DBConnection;
-import db.DocumentMapper;
+import model.Payment;
+import java.util.Date;
 
 /**
- * PaymentDAO - Handles subject-wise payment operations
- * Schema: student_id, subject_id, amount_paid, payment_mode, payment_date, month
+ * Payment DAO - Handles all payment-related database operations
  */
 public class PaymentDAO {
-    private MongoCollection<Document> paymentsCollection;
+    private MongoCollection<Document> paymentCollection;
 
     public PaymentDAO() {
-        MongoDatabase database = DBConnection.getDatabase();
-        if (database != null) {
-            paymentsCollection = database.getCollection("payments");
+        try {
+            MongoDatabase database = DBConnection.getDatabase();
+            if (database != null) {
+                paymentCollection = database.getCollection("payments");
+                System.out.println("[PaymentDAO] ✅ Connected to 'payments' collection");
+            } else {
+                System.err.println("[PaymentDAO] ❌ Database connection failed!");
+            }
+        } catch (Exception e) {
+            System.err.println("[PaymentDAO] Error initializing: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Check if a subject is paid for a student
+     */
+    public boolean isSubjectPaid(String studentId, String subjectId) {
+        if (paymentCollection == null) return false;
+
+        try {
+            Document payment = paymentCollection.find(
+                Filters.and(
+                    Filters.eq("student_id", studentId),
+                    Filters.eq("subject_id", subjectId)
+                )
+            ).first();
+
+            return payment != null;
+
+        } catch (Exception e) {
+            System.err.println("[PaymentDAO] Error checking payment status: " + e.getMessage());
+            return false;
         }
     }
 
@@ -33,151 +55,83 @@ public class PaymentDAO {
      * Insert a new payment record
      */
     public boolean insertPayment(Payment payment) {
-        if (paymentsCollection == null) return false;
+        if (paymentCollection == null) {
+            System.err.println("[PaymentDAO] ❌ Payment collection is null!");
+            return false;
+        }
+
         try {
-            Document doc = DocumentMapper.paymentToDocument(payment);
-            paymentsCollection.insertOne(doc);
+            Document doc = new Document()
+                .append("student_id", payment.getStudentId())
+                .append("subject_id", payment.getSubjectId())
+                .append("amount_paid", payment.getAmountPaid())
+                .append("payment_mode", payment.getPaymentMode())
+                .append("payment_date", payment.getPaymentDate())
+                .append("month", payment.getMonth())
+                .append("created_at", new Date());
+
+            paymentCollection.insertOne(doc);
+            System.out.println("[PaymentDAO] ✅ Payment inserted successfully");
             return true;
+
         } catch (Exception e) {
+            System.err.println("[PaymentDAO] Error inserting payment: " + e.getMessage());
             e.printStackTrace();
+            return false;
         }
-        return false;
     }
 
     /**
-     * Check if a subject is paid for a student
-     * Returns true if any payment exists for this student-subject combination
+     * Get payment record for a specific student-subject combination
      */
-    public boolean isSubjectPaid(String studentId, int subjectId) {
-        if (paymentsCollection == null) return false;
+    public Payment getPayment(String studentId, String subjectId) {
+        if (paymentCollection == null) return null;
+
         try {
-            Document doc = paymentsCollection.find(
+            Document doc = paymentCollection.find(
                 Filters.and(
                     Filters.eq("student_id", studentId),
                     Filters.eq("subject_id", subjectId)
                 )
             ).first();
-            return doc != null;
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return false;
-    }
 
-    /**
-     * Get all payments for a student
-     */
-    public List<Payment> getPaymentsByStudentId(String studentId) {
-        List<Payment> list = new ArrayList<>();
-        if (paymentsCollection == null) return list;
-
-        try (MongoCursor<Document> cursor = paymentsCollection.find(
-                Filters.eq("student_id", studentId)
-            ).sort(Sorts.descending("payment_date")).iterator()) {
-            while (cursor.hasNext()) {
-                Document doc = cursor.next();
-                Payment p = DocumentMapper.documentToPayment(doc);
-                if (p != null) {
-                    list.add(p);
-                }
+            if (doc != null) {
+                Payment payment = new Payment();
+                payment.setStudentId(doc.getString("student_id"));
+                payment.setSubjectId(doc.getString("subject_id"));
+                payment.setAmountPaid(doc.getDouble("amount_paid"));
+                payment.setPaymentMode(doc.getString("payment_mode"));
+                payment.setPaymentDate(doc.getDate("payment_date"));
+                payment.setMonth(doc.getString("month"));
+                return payment;
             }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return list;
-    }
 
-    /**
-     * Get payment for a specific student-subject combination
-     */
-    public Payment getPaymentByStudentAndSubject(String studentId, int subjectId) {
-        if (paymentsCollection == null) return null;
-        try {
-            Document doc = paymentsCollection.find(
-                Filters.and(
-                    Filters.eq("student_id", studentId),
-                    Filters.eq("subject_id", subjectId)
-                )
-            ).first();
-            return DocumentMapper.documentToPayment(doc);
         } catch (Exception e) {
-            e.printStackTrace();
+            System.err.println("[PaymentDAO] Error fetching payment: " + e.getMessage());
         }
+
         return null;
     }
 
     /**
-     * Get all payments for a specific subject
-     * (Admin view - all students who paid for a subject)
+     * Delete a payment record (for undoing payments)
      */
-    public List<Payment> getPaymentsBySubjectId(int subjectId) {
-        List<Payment> list = new ArrayList<>();
-        if (paymentsCollection == null) return list;
+    public boolean deletePayment(String studentId, String subjectId) {
+        if (paymentCollection == null) return false;
 
-        try (MongoCursor<Document> cursor = paymentsCollection.find(
-                Filters.eq("subject_id", subjectId)
-            ).sort(Sorts.descending("payment_date")).iterator()) {
-            while (cursor.hasNext()) {
-                Document doc = cursor.next();
-                Payment p = DocumentMapper.documentToPayment(doc);
-                if (p != null) {
-                    list.add(p);
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return list;
-    }
-
-    /**
-     * Get all payments
-     */
-    public List<Payment> getAllPayments() {
-        List<Payment> list = new ArrayList<>();
-        if (paymentsCollection == null) return list;
-
-        try (MongoCursor<Document> cursor = paymentsCollection.find()
-            .sort(Sorts.descending("payment_date")).iterator()) {
-            while (cursor.hasNext()) {
-                Document doc = cursor.next();
-                Payment p = DocumentMapper.documentToPayment(doc);
-                if (p != null) {
-                    list.add(p);
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return list;
-    }
-
-    /**
-     * Delete a payment by ID
-     */
-    public boolean deletePayment(int paymentId) {
-        if (paymentsCollection == null) return false;
         try {
-            long deletedCount = paymentsCollection.deleteOne(Filters.eq("_id", paymentId)).getDeletedCount();
+            long deletedCount = paymentCollection.deleteOne(
+                Filters.and(
+                    Filters.eq("student_id", studentId),
+                    Filters.eq("subject_id", subjectId)
+                )
+            ).getDeletedCount();
+
             return deletedCount > 0;
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return false;
-    }
 
-    /**
-     * Update payment
-     */
-    public boolean updatePayment(Payment payment) {
-        if (paymentsCollection == null) return false;
-        try {
-            Document doc = DocumentMapper.paymentToDocument(payment);
-            long matched = paymentsCollection.replaceOne(Filters.eq("_id", payment.getPaymentId()), doc).getMatchedCount();
-            return matched > 0;
         } catch (Exception e) {
-            e.printStackTrace();
+            System.err.println("[PaymentDAO] Error deleting payment: " + e.getMessage());
+            return false;
         }
-        return false;
     }
 }

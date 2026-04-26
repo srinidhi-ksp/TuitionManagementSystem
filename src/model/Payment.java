@@ -15,7 +15,7 @@ import java.util.Date;
 public class Payment {
     private int paymentId;
     private String studentId;         // Student's user_id
-    private int subjectId;            // Subject ID
+    private String subjectId;         // Subject ID
     private double amountPaid;        // Amount paid for subject
     private Date paymentDate;         // Date of payment
     private String paymentMode;       // Cash, UPI, Card
@@ -25,30 +25,8 @@ public class Payment {
     private int feeId;
     private String receiptNo;
 
-    // Default Constructor
-    public Payment() {
-    }
-
-    // Constructor with new schema
-    public Payment(int paymentId, String studentId, int subjectId, 
-                   double amountPaid, Date paymentDate, String paymentMode, String month) {
-        this.paymentId = paymentId;
-        this.studentId = studentId;
-        this.subjectId = subjectId;
-        this.amountPaid = amountPaid;
-        this.paymentDate = paymentDate;
-        this.paymentMode = paymentMode;
-        this.month = month;
-    }
-
-    // Getters and Setters
-    public int getPaymentId() {
-        return paymentId;
-    }
-
-    public void setPaymentId(int paymentId) {
-        this.paymentId = paymentId;
-    }
+    public int getPaymentId() { return paymentId; }
+    public void setPaymentId(int paymentId) { this.paymentId = paymentId; }
 
     public String getStudentId() {
         return studentId;
@@ -58,11 +36,11 @@ public class Payment {
         this.studentId = studentId;
     }
 
-    public int getSubjectId() {
+    public String getSubjectId() {
         return subjectId;
     }
 
-    public void setSubjectId(int subjectId) {
+    public void setSubjectId(String subjectId) {
         this.subjectId = subjectId;
     }
 
@@ -107,12 +85,12 @@ public class Payment {
         this.feeId = feeId;
     }
 
-    public String getReceiptNo() {
-        return receiptNo;
+    public String getReceiptNo() { 
+        return receiptNo; 
     }
-
-    public void setReceiptNo(String receiptNo) {
-        this.receiptNo = receiptNo;
+    
+    public void setReceiptNo(String receiptNo) { 
+        this.receiptNo = receiptNo; 
     }
 
     @Override

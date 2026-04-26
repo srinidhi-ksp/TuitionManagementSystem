@@ -1,15 +1,39 @@
 package ui;
 
-import service.AuthService;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.GradientPaint;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.GridBagLayout;
+import java.awt.GridLayout;
+import java.awt.RenderingHints;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
+
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPasswordField;
+import javax.swing.JTextField;
+import javax.swing.SwingConstants;
+import javax.swing.border.EmptyBorder;
+
 import model.User;
+import service.AuthService;
 import ui.admin.AdminDashboard;
 import util.SessionManager;
-
-import javax.swing.*;
-import javax.swing.border.*;
-import java.awt.*;
-import java.awt.event.*;
-import java.awt.geom.*;
 
 public class LoginFrame extends JFrame {
 
@@ -273,52 +297,82 @@ public class LoginFrame extends JFrame {
         String password = new String(passwordField.getPassword());
         String role     = roleCombo.getSelectedItem().toString();
 
+        System.out.println("\n=============================================");
+        System.out.println("[LoginFrame] Login attempt initiated");
+        System.out.println("[LoginFrame] Username/Email: " + username);
+        System.out.println("[LoginFrame] Password length: " + password.length());
+        System.out.println("[LoginFrame] Selected Role: " + role);
+        System.out.println("=============================================");
+
         if (username.isEmpty() || password.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Please enter username and password.", "Validation", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        User user = new AuthService().login(username, password, role);
-        if (user != null) {
-            String sessionUserId = user.getUserId();
-            String sessionUserName = user.getName() != null ? user.getName() : user.getUserId();
+        try {
+            User user = new AuthService().login(username, password, role);
+            if (user != null) {
+                System.out.println("[LoginFrame] ✅ Login successful for: " + user.getEmail());
+                
+                String sessionUserId = user.getUserId();
+                String sessionUserName = user.getName() != null ? user.getName() : user.getUserId();
 
-            if ("Student".equalsIgnoreCase(role)) {
-                model.Student s = new dao.StudentDAO().getStudentByUserId(user.getUserId());
-                if (s == null) s = new dao.StudentDAO().getStudentById(user.getUserId());
-                if (s != null) {
-                    sessionUserId = s.getUserId();
-                    if (s.getName() != null && !s.getName().trim().isEmpty()) {
-                        sessionUserName = s.getName();
+                if ("Student".equalsIgnoreCase(role)) {
+                    model.Student s = new dao.StudentDAO().getStudentByUserId(user.getUserId());
+                    if (s == null) s = new dao.StudentDAO().getStudentById(user.getUserId());
+                    if (s != null) {
+                        sessionUserId = s.getUserId();
+                        if (s.getName() != null && !s.getName().trim().isEmpty()) {
+                            sessionUserName = s.getName();
+                        }
+                    }
+                } else if ("Teacher".equalsIgnoreCase(role) || "Admin".equalsIgnoreCase(role)) {
+                    // Fetch from teachers collection for both Teacher and Admin roles
+                    model.Teacher t = new dao.TeacherDAO().getByUserId(user.getUserId());
+                    System.out.println("[LoginFrame] Debug - User ID: " + user.getUserId());
+                    System.out.println("[LoginFrame] Debug - Teacher Found: " + t);
+                    
+                    if (t != null) {
+                        sessionUserId = t.getUserId();
+                        if (t.getName() != null && !t.getName().trim().isEmpty()) {
+                            sessionUserName = t.getName();
+                        }
+                    } else {
+                        // Fallback to email if teacher profile not found
+                        sessionUserName = user.getEmail();
                     }
                 }
-            } else if ("Teacher".equalsIgnoreCase(role)) {
-                model.Teacher t = new dao.TeacherDAO().getTeacherById(user.getUserId());
-                if (t != null) {
-                    sessionUserId = t.getUserId();
-                    if (t.getName() != null && !t.getName().trim().isEmpty()) {
-                        sessionUserName = t.getName();
-                    }
-                }
+
+                SessionManager.getInstance().setSession(sessionUserId, user.getRole(), sessionUserName, user.getEmail());
+                JOptionPane.showMessageDialog(this, "Login successful! Welcome, " + sessionUserName, "Success", JOptionPane.INFORMATION_MESSAGE);
+                openDashboard(user);
+            } else {
+                System.err.println("[LoginFrame] ❌ Login failed!");
+                JOptionPane.showMessageDialog(this, "Invalid credentials. Please verify:\n" +
+                        "• Email/Username is correct\n" +
+                        "• Password is correct\n" +
+                        "• Selected role matches your account", "Login Failed", JOptionPane.ERROR_MESSAGE);
             }
-
-            SessionManager.getInstance().setSession(sessionUserId, user.getRole(), sessionUserName);
-            openDashboard(user);
-        } else {
-            JOptionPane.showMessageDialog(this, "Invalid credentials. Please try again.", "Login Failed", JOptionPane.ERROR_MESSAGE);
+        } catch (Exception e) {
+            System.err.println("[LoginFrame] ❌ Login error: " + e.getMessage());
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "An error occurred during login:\n" + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
     private void openDashboard(User user) {
         String role = user.getRole();
         if ("Admin".equalsIgnoreCase(role)) {
-            new AdminDashboard().setVisible(true);
+            new AdminDashboard(user).setVisible(true);
             dispose();
         } else if ("Student".equalsIgnoreCase(role)) {
             new ui.student.StudentDashboard(user).setVisible(true);
             dispose();
         } else if ("Teacher".equalsIgnoreCase(role)) {
             new ui.teacher.TeacherDashboard(user).setVisible(true);
+            dispose();
+        } else if ("Parent".equalsIgnoreCase(role)) {
+            new ui.parent.ParentDashboard(user).setVisible(true);
             dispose();
         } else {
             JOptionPane.showMessageDialog(this, role + " portal coming soon!");

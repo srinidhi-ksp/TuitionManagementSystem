@@ -206,15 +206,12 @@ public class PaymentDialog extends JDialog {
     private void handleSave() {
         try {
             String paymentMode = (String) paymentModeCombo.getSelectedItem();
-            String month = new SimpleDateFormat("yyyy-MM").format(new Date());
 
-            // Mark subject as paid
-            boolean success = feeService.markSubjectAsPaid(
+            // Record payment
+            boolean success = feeService.recordPayment(
                 studentId,
-                subjectId,
-                feeAmount,
-                paymentMode,
-                month
+                String.valueOf(subjectId),
+                paymentMode
             );
 
             if (success) {
