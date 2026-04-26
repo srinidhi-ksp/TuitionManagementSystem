@@ -60,6 +60,7 @@ public class AdminDashboard extends JFrame {
         mainContentPanel.add(new BatchManagementFrame(),      "Batches");
         mainContentPanel.add(new EnrollmentManagementFrame(), "Enrollment");
         mainContentPanel.add(new AttendanceManagementFrame(), "Attendance");
+        mainContentPanel.add(new FeeManagementFrame(),        "Fees & Payments");
         mainContentPanel.add(new SettingsFrame(),             "Settings");
 
         add(createTopNavbar(),  BorderLayout.NORTH);
@@ -158,6 +159,7 @@ public class AdminDashboard extends JFrame {
         addSidebarSection("OPERATIONS");
         addSidebarItem("📝", "Enrollment");
         addSidebarItem("📊", "Attendance");
+        addSidebarItem("💳", "Fees & Payments");
 
         sidebarPanel.add(Box.createRigidArea(new Dimension(0, 8)));
         addSidebarSection("SYSTEM");

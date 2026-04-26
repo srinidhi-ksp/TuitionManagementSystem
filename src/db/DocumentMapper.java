@@ -466,8 +466,13 @@ public class DocumentMapper {
     }
 
     // ====================================
-    // PAYMENT MAPPER
+    // PAYMENT MAPPER (NEW SCHEMA)
     // ====================================
+    /**
+     * Convert Document to Payment object
+     * Supports new schema: student_id, subject_id, amount_paid, payment_mode, payment_date, month
+     * Also supports legacy schema: fee_id, receipt_no
+     */
     public static model.Payment documentToPayment(Document doc) {
         if (doc == null) return null;
         model.Payment p = new model.Payment();
@@ -476,30 +481,52 @@ public class DocumentMapper {
         if (idObj instanceof Number) p.setPaymentId(((Number) idObj).intValue());
         else if (idObj != null) try { p.setPaymentId(Integer.parseInt(idObj.toString())); } catch (Exception ex) {}
         
-        Object feeObj = doc.get("fee_id");
-        if (feeObj instanceof Number) p.setFeeId(((Number) feeObj).intValue());
-        else if (feeObj != null) try { p.setFeeId(Integer.parseInt(feeObj.toString())); } catch (Exception ex) {}
+        // New schema fields
+        p.setStudentId(doc.getString("student_id"));
+        
+        Object subjectObj = doc.get("subject_id");
+        if (subjectObj instanceof Number) p.setSubjectId(((Number) subjectObj).intValue());
+        else if (subjectObj != null) try { p.setSubjectId(Integer.parseInt(subjectObj.toString())); } catch (Exception ex) {}
         
         Object amountObj = doc.get("amount_paid");
         if (amountObj instanceof Number) p.setAmountPaid(((Number) amountObj).doubleValue());
         
+        p.setPaymentMode(doc.getString("payment_mode"));
         p.setPaymentDate(doc.getDate("payment_date"));
         if (p.getPaymentDate() == null) p.setPaymentDate(doc.getDate("date"));
         
-        p.setPaymentMode(doc.getString("payment_mode"));
+        p.setMonth(doc.getString("month"));
+        
+        // Legacy fields for backward compatibility
+        Object feeObj = doc.get("fee_id");
+        if (feeObj instanceof Number) p.setFeeId(((Number) feeObj).intValue());
+        else if (feeObj != null) try { p.setFeeId(Integer.parseInt(feeObj.toString())); } catch (Exception ex) {}
+        
         p.setReceiptNo(doc.getString("receipt_no"));
         
         return p;
     }
 
+    /**
+     * Convert Payment object to Document
+     * New schema: student_id, subject_id, amount_paid, payment_mode, payment_date, month
+     */
     public static Document paymentToDocument(model.Payment p) {
         Document doc = new Document();
         doc.append("_id", p.getPaymentId());
-        doc.append("fee_id", p.getFeeId());
+        
+        // New schema fields
+        doc.append("student_id", p.getStudentId());
+        doc.append("subject_id", p.getSubjectId());
         doc.append("amount_paid", p.getAmountPaid());
-        doc.append("payment_date", p.getPaymentDate());
         doc.append("payment_mode", p.getPaymentMode());
-        doc.append("receipt_no", p.getReceiptNo());
+        doc.append("payment_date", p.getPaymentDate());
+        doc.append("month", p.getMonth());
+        
+        // Legacy fields (optional)
+        if (p.getFeeId() > 0) doc.append("fee_id", p.getFeeId());
+        if (p.getReceiptNo() != null) doc.append("receipt_no", p.getReceiptNo());
+        
         return doc;
     }
 

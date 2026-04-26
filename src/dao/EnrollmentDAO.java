@@ -64,6 +64,37 @@ public class EnrollmentDAO {
         return list;
     }
 
+    /**
+     * Get all ACTIVE enrollments for a specific student
+     * Used for fee management to determine unique subjects
+     */
+    public List<Enrollment> getActiveEnrollmentsByStudentId(String studentId) {
+        List<Enrollment> list = new ArrayList<>();
+        if (enrollmentCollection == null) return list;
+
+        try (MongoCursor<Document> cursor = enrollmentCollection.find(
+                Filters.and(
+                    Filters.or(
+                        Filters.eq("student_user_id", studentId),
+                        Filters.eq("student_id", studentId),
+                        Filters.eq("user_id", studentId)
+                    ),
+                    Filters.eq("status", "ACTIVE")
+                )
+            ).iterator()) {
+            while (cursor.hasNext()) {
+                Document doc = cursor.next();
+                Enrollment e = DocumentMapper.documentToEnrollment(doc);
+                if (e != null) {
+                    list.add(e);
+                }
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+        return list;
+    }
+
     public List<model.Batch> getBatchesByStudentId(String studentId) {
         List<model.Batch> batches = new ArrayList<>();
         if (enrollmentCollection == null) return batches;
