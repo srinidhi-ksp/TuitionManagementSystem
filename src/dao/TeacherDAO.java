@@ -131,4 +131,56 @@ public class TeacherDAO {
         }
         return teacherList;
     }
+
+    /**
+     * Get teachers for a specific class
+     */
+    public List<Teacher> getTeachersByClass(String className) {
+        List<Teacher> teacherList = new ArrayList<>();
+        if (teacherCollection == null || className == null) return teacherList;
+        
+        try (MongoCursor<Document> cursor = teacherCollection.find(
+            Filters.in("classes", className)
+        ).iterator()) {
+            while (cursor.hasNext()) {
+                Document doc = cursor.next();
+                Teacher t = DocumentMapper.documentToTeacher(doc);
+                if (t != null) {
+                    // Fetch join date similar to getAllTeachers
+                    Date joinDate = null;
+                    String userRefId = doc.getString("user_id");
+                    if (userRefId != null && !userRefId.isEmpty()) {
+                        joinDate = userDAO.getCreatedAt(userRefId);
+                    }
+                    if (joinDate == null && t.getEmail() != null) {
+                        joinDate = userDAO.getCreatedAtByEmail(t.getEmail());
+                    }
+                    if (joinDate == null) {
+                        joinDate = userDAO.getCreatedAt(t.getUserId());
+                    }
+                    t.setJoinDate(joinDate);
+                    teacherList.add(t);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[TeacherDAO] Error getting teachers by class: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return teacherList;
+    }
+
+    public Teacher getByUserId(String userId) {
+        if (teacherCollection == null || userId == null) return null;
+        try {
+            Document doc = teacherCollection.find(Filters.eq("user_id", userId)).first();
+            if (doc == null) {
+                // Try direct ID lookup if user_id field is not present
+                doc = teacherCollection.find(Filters.eq("_id", userId)).first();
+            }
+            return DocumentMapper.documentToTeacher(doc);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
 }

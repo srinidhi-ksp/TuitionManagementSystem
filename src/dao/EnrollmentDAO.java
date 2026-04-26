@@ -74,12 +74,13 @@ public class EnrollmentDAO {
             String tid = studentId != null ? studentId.trim() : "";
             System.out.println("[EnrollmentDAO] Querying enrollments for ID: '" + tid + "'");
             
-            // Query: (student_user_id OR student_id) AND status = ACTIVE
+            // Query: (student_user_id OR student_id OR user_id) AND status = ACTIVE
             MongoCursor<Document> cursor = enrollmentCollection.find(
                 Filters.and(
                     Filters.or(
                         Filters.eq("student_user_id", tid),
-                        Filters.eq("student_id", tid)
+                        Filters.eq("student_id", tid),
+                        Filters.eq("user_id", tid)
                     ),
                     Filters.eq("status", "ACTIVE")
                 )

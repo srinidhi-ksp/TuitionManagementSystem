@@ -24,9 +24,7 @@ public class BatchFormValidator {
         if (batchName.trim().length() < 3) {
             return "Batch Name must be at least 3 characters";
         }
-        if (batchName.trim().matches("^\\s*$")) {
-            return "Batch Name cannot be only spaces";
-        }
+        // No only spaces is already covered by trim().isEmpty()
         return null; // Valid
     }
 
@@ -34,23 +32,28 @@ public class BatchFormValidator {
      * Validate combo box selection (not default value)
      */
     public static String validateComboSelection(JComboBox<?> combo, String fieldName) {
-        int selectedIndex = combo.getSelectedIndex();
-        
-        // First item (index 0) is typically "Select..."
-        if (selectedIndex <= 0) {
+        Object selected = combo.getSelectedItem();
+        if (selected == null) {
             return "Please select a " + fieldName;
         }
         
-        String selected = combo.getSelectedItem().toString();
-        if (selected.contains("Select") || selected.isEmpty()) {
-            return "Please select a valid " + fieldName;
+        String selectedStr = selected.toString();
+        
+        // Check for default placeholder values
+        if (selectedStr.equalsIgnoreCase("Select " + fieldName) || 
+            selectedStr.equalsIgnoreCase("Select Class") ||
+            selectedStr.equalsIgnoreCase("Select Subject") ||
+            selectedStr.equalsIgnoreCase("Select Teacher") ||
+            selectedStr.equalsIgnoreCase("Select Mode") ||
+            combo.getSelectedIndex() <= 0) {
+            return "Please select a " + fieldName;
         }
         
         return null; // Valid
     }
 
     /**
-     * Validate time selection (handles Date objects from TimeChooser)
+     * Validate time selection
      */
     public static String validateTimeSelection(Date startTime, Date endTime) {
         if (startTime == null) {
@@ -60,7 +63,7 @@ public class BatchFormValidator {
             return "End Time is required";
         }
 
-        if (endTime.before(startTime) || endTime.equals(startTime)) {
+        if (!endTime.after(startTime)) {
             return "End Time must be after Start Time";
         }
 
@@ -77,14 +80,13 @@ public class BatchFormValidator {
             }
             
             String trimmed = meetingLink.trim();
-            if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
-                return "Meeting link must start with http:// or https://";
+            if (!trimmed.toLowerCase().startsWith("http://") && !trimmed.toLowerCase().startsWith("https://")) {
+                return "Meeting link must be a valid URL starting with http/https";
             }
             
-            try {
-                new java.net.URL(trimmed);
-            } catch (java.net.MalformedURLException e) {
-                return "Invalid meeting link URL";
+            // Simple regex for URL validation
+            if (!trimmed.matches("^(https?|ftp|file)://[-a-zA-Z0-9+&@#/%?=~_|!:,.;]*[-a-zA-Z0-9+&@#/%=~_|]")) {
+                return "Invalid meeting link URL format";
             }
         }
         return null; // Valid
@@ -108,7 +110,7 @@ public class BatchFormValidator {
         if (nameError != null) return nameError;
 
         // 2. Validate Class/Standard
-        String classError = validateComboSelection(classLevelCombo, "Class/Standard");
+        String classError = validateComboSelection(classLevelCombo, "Class");
         if (classError != null) return classError;
 
         // 3. Validate Subject
@@ -120,7 +122,7 @@ public class BatchFormValidator {
         if (teacherError != null) return teacherError;
 
         // 5. Validate Class Mode
-        String modeError = validateComboSelection(modeCombo, "Class Mode");
+        String modeError = validateComboSelection(modeCombo, "Mode");
         if (modeError != null) return modeError;
 
         // 6. Validate Times
@@ -128,7 +130,8 @@ public class BatchFormValidator {
         if (timeError != null) return timeError;
 
         // 7. Validate Meeting Link (if online)
-        String linkError = validateMeetingLink(meetingLink, modeCombo.getSelectedItem().toString());
+        String selectedMode = modeCombo.getSelectedItem() != null ? modeCombo.getSelectedItem().toString() : "";
+        String linkError = validateMeetingLink(meetingLink, selectedMode);
         if (linkError != null) return linkError;
 
         return null; // All validations passed
@@ -145,29 +148,5 @@ public class BatchFormValidator {
             JOptionPane.ERROR_MESSAGE
         );
     }
-
-    /**
-     * Highlight invalid field (optional UI enhancement)
-     */
-    public static void highlightField(JComponent component, boolean isInvalid) {
-        if (component instanceof JTextField) {
-            JTextField field = (JTextField) component;
-            if (isInvalid) {
-                field.setBorder(BorderFactory.createLineBorder(new java.awt.Color(244, 67, 54), 2, true));
-                field.setBackground(new java.awt.Color(255, 245, 245));
-            } else {
-                field.setBorder(null);
-                field.setBackground(java.awt.Color.WHITE);
-            }
-        } else if (component instanceof JComboBox) {
-            JComboBox<?> combo = (JComboBox<?>) component;
-            if (isInvalid) {
-                combo.setBorder(BorderFactory.createLineBorder(new java.awt.Color(244, 67, 54), 2, true));
-                combo.setBackground(new java.awt.Color(255, 245, 245));
-            } else {
-                combo.setBorder(null);
-                combo.setBackground(java.awt.Color.WHITE);
-            }
-        }
-    }
 }
+

@@ -84,4 +84,9 @@ public class Teacher extends User {
 
     public Salary getSalary() { return salary; }
     public void setSalary(Salary salary) { this.salary = salary; }
+
+    @Override
+    public String toString() {
+        return getUserId() + " - " + (getName() != null ? getName() : "Teacher");
+    }
 }

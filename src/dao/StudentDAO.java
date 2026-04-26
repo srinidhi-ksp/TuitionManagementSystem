@@ -4,15 +4,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.bson.Document;
+
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.ReplaceOptions;
 
-import model.Student;
 import db.DBConnection;
 import db.DocumentMapper;
+import model.Student;
 
 public class StudentDAO {
 
@@ -55,39 +56,71 @@ public class StudentDAO {
         return null;
     }
 
-    // Robust mapping: user_id (U01) -> Student object (S001)
+    /**
+     * CRITICAL: Robust mapping: user_id (U01) -> Student object (S001)
+     * Uses multiple strategies to find student by user ID
+     */
     public Student getStudentByUserId(String userIdValue) {
-        if (studentCollection == null || userIdValue == null) return null;
+        if (studentCollection == null || userIdValue == null) {
+            System.err.println("[StudentDAO] ❌ getStudentByUserId: Collection or ID is null");
+            return null;
+        }
+        
         try {
-            System.out.println("[StudentDAO] Attempting to map User ID: " + userIdValue);
+            String searchId = userIdValue.trim();
+            System.out.println("[StudentDAO] 🔍 Attempting to map User ID: '" + searchId + "'");
             
-            // 1. Try exact match on 'user_id' field
-            Document doc = studentCollection.find(Filters.eq("user_id", userIdValue)).first();
+            // STRATEGY 1: Try exact match on 'user_id' field (if documents have this field)
+            Document doc = studentCollection.find(Filters.eq("user_id", searchId)).first();
+            if (doc != null) {
+                System.out.println("[StudentDAO]   ✅ Found via user_id field");
+                Student s = DocumentMapper.documentToStudent(doc);
+                if (s != null) {
+                    System.out.println("[StudentDAO] ✅ Mapped " + searchId + " → Student " + s.getUserId());
+                }
+                return s;
+            }
+            System.out.println("[StudentDAO]   ⚠️  No match on user_id field");
             
-            // 2. Try match on email (most reliable)
-            if (doc == null) {
-                UserDAO userDAO = new UserDAO();
-                model.User user = userDAO.getUserById(userIdValue);
-                if (user != null && user.getEmail() != null) {
-                    System.out.println("[StudentDAO] Searching by email: " + user.getEmail());
-                    doc = studentCollection.find(Filters.eq("email", user.getEmail())).first();
+            // STRATEGY 2: Try match on email (most reliable cross-reference)
+            System.out.println("[StudentDAO]   🔄 Trying email-based lookup...");
+            UserDAO userDAO = new UserDAO();
+            model.User user = userDAO.getUserById(searchId);
+            if (user != null && user.getEmail() != null) {
+                String email = user.getEmail();
+                System.out.println("[StudentDAO]   Searching by email: " + email);
+                doc = studentCollection.find(Filters.eq("email", email)).first();
+                if (doc != null) {
+                    System.out.println("[StudentDAO]   ✅ Found via email field");
+                    Student s = DocumentMapper.documentToStudent(doc);
+                    if (s != null) {
+                        System.out.println("[StudentDAO] ✅ Mapped " + searchId + " → Student " + s.getUserId());
+                    }
+                    return s;
+                }
+            }
+            System.out.println("[StudentDAO]   ⚠️  No match on email field");
+
+            // STRATEGY 3: Fallback - Check if the provided ID is already the Student ID (_id)
+            if (searchId.startsWith("S")) {
+                System.out.println("[StudentDAO]   🔄 ID starts with 'S', trying as student_id...");
+                doc = studentCollection.find(Filters.eq("_id", searchId)).first();
+                if (doc != null) {
+                    System.out.println("[StudentDAO]   ✅ Found via _id field (already student_id)");
+                    Student s = DocumentMapper.documentToStudent(doc);
+                    if (s != null) {
+                        System.out.println("[StudentDAO] ✅ Mapped " + searchId + " → Student " + s.getUserId());
+                    }
+                    return s;
                 }
             }
 
-            // 3. Fallback: Check if the provided ID is already the Student ID (_id)
-            if (doc == null && userIdValue.startsWith("S")) {
-                doc = studentCollection.find(Filters.eq("_id", userIdValue)).first();
-            }
-
-            Student s = DocumentMapper.documentToStudent(doc);
-            if (s != null) {
-                System.out.println("[StudentDAO] ✅ Mapped " + userIdValue + " to Student " + s.getUserId());
-            } else {
-                System.out.println("[StudentDAO] ❌ Failed to map User ID: " + userIdValue);
-            }
-            return s;
+            System.err.println("[StudentDAO] ❌ FAILED to map User ID: " + searchId + " (all strategies exhausted)");
+            return null;
+            
         } catch (Exception e) {
-            System.err.println("[StudentDAO] Error mapping user to student: " + e.getMessage());
+            System.err.println("[StudentDAO] ❌ Error in getStudentByUserId: " + e.getMessage());
+            e.printStackTrace();
         }
         return null;
     }

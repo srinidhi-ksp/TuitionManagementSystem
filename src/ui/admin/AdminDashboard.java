@@ -27,9 +27,11 @@ import javax.swing.JPopupMenu;
 import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 
 import dao.DashboardDAO;
+import model.User;
 import ui.LoginFrame;
 
 public class AdminDashboard extends JFrame {
@@ -50,8 +52,9 @@ public class AdminDashboard extends JFrame {
     private JPanel mainContentPanel;
     private JPanel sidebarPanel;
     private JButton activeBtn = null;
+    private User currentUser;
 
-    // Stat labels (refreshed on demand)
+    // Stat labels
     private JLabel stdCountLabel;
     private JLabel teacherCountLabel;
     private JLabel subCountLabel;
@@ -61,7 +64,8 @@ public class AdminDashboard extends JFrame {
     private JPanel alertsListPanel;
     private JPanel attendanceSummaryPanel;
 
-    public AdminDashboard() {
+    public AdminDashboard(User user) {
+        this.currentUser = user;
         setTitle("MRK Tuition – Admin Dashboard");
         setSize(1340, 820);
         setLocationRelativeTo(null);
@@ -75,6 +79,7 @@ public class AdminDashboard extends JFrame {
 
         // Register all panels
         mainContentPanel.add(createDashboardPanel(),          "Admin Dashboard");
+        mainContentPanel.add(new AdminProfilePanel(currentUser), "Profile");
         mainContentPanel.add(new StudentManagementFrame(),    "Students");
         mainContentPanel.add(new ParentManagementFrame(),     "Parents");
         mainContentPanel.add(new TeacherManagementFrame(),    "Teachers");
@@ -82,7 +87,7 @@ public class AdminDashboard extends JFrame {
         mainContentPanel.add(new BatchManagementFrame(),      "Batches");
         mainContentPanel.add(new EnrollmentManagementFrame(), "Enrollment");
         mainContentPanel.add(new AttendanceManagementFrame(), "Attendance");
-        mainContentPanel.add(new FeesManagementPanel(), "Fees & Payments");
+        mainContentPanel.add(new FeesManagementPanel(),       "Fees & Payments");
         mainContentPanel.add(new SettingsFrame(),             "Settings");
 
         add(createTopNavbar(),  BorderLayout.NORTH);
@@ -94,12 +99,11 @@ public class AdminDashboard extends JFrame {
     private JPanel createTopNavbar() {
         JPanel topPanel = new JPanel(new BorderLayout());
         topPanel.setBackground(TOPBAR_BG);
-        topPanel.setPreferredSize(new Dimension(0, 60)); // Fixed height
-        topPanel.setBorder(new EmptyBorder(5, 15, 5, 15)); // Padding
+        topPanel.setPreferredSize(new Dimension(0, 60)); // Fixed height 60px
+        topPanel.setBorder(new EmptyBorder(0, 20, 0, 20));
 
         // Logo (Left side)
-        JPanel logoPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-        logoPanel.setBackground(TOPBAR_BG);
+        JPanel logoPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 12));
         logoPanel.setOpaque(false);
 
         JLabel logoIcon = new JLabel("M") {
@@ -127,37 +131,90 @@ public class AdminDashboard extends JFrame {
 
         // User Profile Section (Right side)
         JPanel userPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 5));
-        userPanel.setBackground(TOPBAR_BG);
         userPanel.setOpaque(false);
 
-        JButton profileBtn = new JButton("👤  Admin  ▾");
+        // Fetch name from Teachers collection instead of Users for architectural consistency
+        dao.TeacherDAO tDAO = new dao.TeacherDAO();
+        model.Teacher tObj = tDAO.getByUserId(currentUser.getUserId());
+        String adminName = (tObj != null && tObj.getName() != null) ? tObj.getName() : 
+                          (currentUser.getUserId() != null ? currentUser.getUserId() : "Admin");
+
+        // Profile Dropdown Button (Independent Component)
+        JButton profileBtn = new JButton("👤  " + adminName + "  ▾");
         profileBtn.setFont(new Font("SansSerif", Font.BOLD, 13));
         profileBtn.setForeground(Color.WHITE);
-        profileBtn.setBackground(new Color(255, 255, 255, 25));
+        profileBtn.setBackground(new Color(30, 41, 59)); // Solid Dark Blue
         profileBtn.setFocusPainted(false);
-        profileBtn.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(new Color(255, 255, 255, 60), 1, true),
-            new EmptyBorder(6, 16, 6, 16)
-        ));
+        profileBtn.setContentAreaFilled(true);
+        profileBtn.setOpaque(true);
+        profileBtn.setBorderPainted(false);
         profileBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        
+        // Fix background inheritance and add hover effect
+        profileBtn.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseEntered(java.awt.event.MouseEvent e) {
+                profileBtn.setBackground(new Color(51, 65, 85));
+            }
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                profileBtn.setBackground(new Color(30, 41, 59));
+            }
+        });
 
         JPopupMenu popup = new JPopupMenu();
         popup.setBackground(CARD_BG);
         popup.setBorder(BorderFactory.createLineBorder(new Color(220, 225, 240)));
+        
+        JMenuItem profileItem = new JMenuItem(" My Profile ");
+        profileItem.addActionListener(e -> navigateTo("Profile"));
+        
+        JMenuItem settingsItem = new JMenuItem(" Account Settings ");
+        settingsItem.addActionListener(e -> navigateTo("Settings"));
+        
         JMenuItem logoutItem = new JMenuItem(" Logout ");
         logoutItem.setForeground(new Color(220, 50, 50));
-        logoutItem.addActionListener(e -> { dispose(); new LoginFrame().setVisible(true); });
-        popup.add(new JMenuItem(" My Profile "));
-        popup.add(new JMenuItem(" Account Settings "));
+        logoutItem.addActionListener(e -> performLogout());
+        
+        popup.add(profileItem);
+        popup.add(settingsItem);
         popup.addSeparator();
         popup.add(logoutItem);
+        
         profileBtn.addActionListener(e -> popup.show(profileBtn, 0, profileBtn.getHeight()));
         
         userPanel.add(profileBtn);
 
+        // Safe UI Reset
+        SwingUtilities.invokeLater(() -> {
+            profileBtn.repaint();
+            profileBtn.revalidate();
+        });
+
         topPanel.add(logoPanel, BorderLayout.WEST);
         topPanel.add(userPanel, BorderLayout.EAST);
         return topPanel;
+    }
+
+    private void navigateTo(String label) {
+        cardLayout.show(mainContentPanel, label);
+        // Update sidebar active button if needed
+        Component[] comps = sidebarPanel.getComponents();
+        for (Component c : comps) {
+            if (c instanceof JButton) {
+                JButton b = (JButton) c;
+                if (b.getText().contains(label)) {
+                    if (activeBtn != null) activeBtn.setForeground(new Color(255, 255, 255, 180));
+                    activeBtn = b;
+                    b.setForeground(Color.WHITE);
+                }
+            }
+        }
+        if (label.equals("Admin Dashboard")) refreshDashboard();
+        repaint();
+    }
+
+    private void performLogout() {
+        dispose();
+        new LoginFrame().setVisible(true);
     }
 
     // ── Sidebar ────────────────────────────────────────────────────────────────
@@ -172,6 +229,7 @@ public class AdminDashboard extends JFrame {
 
         addSidebarSection("MANAGEMENT");
         addSidebarItem("🏠", "Admin Dashboard");
+        addSidebarItem("👤", "Profile");
         addSidebarItem("👩‍🎓", "Students");
         addSidebarItem("👨‍🏫", "Teachers");
         addSidebarItem("👪", "Parents");
@@ -233,7 +291,6 @@ public class AdminDashboard extends JFrame {
         btn.setForeground(new Color(255, 255, 255, 180));
         btn.setAlignmentX(Component.LEFT_ALIGNMENT);
         
-        // Uniform sizing
         Dimension btnSize = new Dimension(240, 45);
         btn.setMaximumSize(btnSize);
         btn.setPreferredSize(btnSize);
@@ -245,18 +302,9 @@ public class AdminDashboard extends JFrame {
         btn.setFocusPainted(false);
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         btn.setHorizontalAlignment(SwingConstants.LEFT);
-        
-        // Consistent padding
         btn.setBorder(BorderFactory.createEmptyBorder(10, 24, 10, 15));
-
-        btn.addActionListener(e -> {
-            if (activeBtn != null) activeBtn.setForeground(new Color(255, 255, 255, 180));
-            activeBtn = btn;
-            btn.setForeground(Color.WHITE);
-            cardLayout.show(mainContentPanel, label);
-            if (label.equals("Admin Dashboard")) refreshDashboard();
-            repaint();
-        });
+        
+        btn.addActionListener(e -> navigateTo(label));
 
         sidebarPanel.add(btn);
         if (activeBtn == null && label.equals("Admin Dashboard")) {
@@ -283,10 +331,7 @@ public class AdminDashboard extends JFrame {
         btn.setHorizontalAlignment(SwingConstants.LEFT);
         btn.setBorder(BorderFactory.createEmptyBorder(10, 24, 10, 15));
         
-        btn.addActionListener(e -> {
-            dispose();
-            new LoginFrame().setVisible(true);
-        });
+        btn.addActionListener(e -> performLogout());
         return btn;
     }
 
@@ -296,11 +341,16 @@ public class AdminDashboard extends JFrame {
         dash.setBackground(PAGE_BG);
         dash.setBorder(new EmptyBorder(32, 36, 32, 36));
 
-        // Header
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(PAGE_BG);
         header.setBorder(new EmptyBorder(0, 0, 4, 0));
-        JLabel title    = new JLabel("Admin Dashboard");
+        // Fetch real name for welcome message
+        dao.TeacherDAO tDAO = new dao.TeacherDAO();
+        model.Teacher tObj = tDAO.getByUserId(currentUser.getUserId());
+        String displayName = (tObj != null && tObj.getName() != null) ? tObj.getName() : 
+                            (currentUser.getUserId() != null ? currentUser.getUserId() : "Admin");
+
+        JLabel title    = new JLabel("Welcome, " + displayName);
         title.setFont(new Font("SansSerif", Font.BOLD, 26));
         title.setForeground(TEXT_PRI);
         JLabel subtitle = new JLabel("Overview of MRK Tuition Management System");
@@ -312,7 +362,6 @@ public class AdminDashboard extends JFrame {
         titleStack.add(subtitle);
         header.add(titleStack, BorderLayout.WEST);
 
-        // Stat cards
         DashboardDAO dao = new DashboardDAO();
         stdCountLabel     = makeCountLabel(String.valueOf(dao.getTotalStudents()));
         teacherCountLabel = makeCountLabel(String.valueOf(dao.getTotalTeachers()));
@@ -331,7 +380,6 @@ public class AdminDashboard extends JFrame {
         topSection.add(header,     BorderLayout.NORTH);
         topSection.add(statsPanel, BorderLayout.CENTER);
 
-        // Attendance + Alerts
         JPanel lowerPanel = new JPanel(new GridLayout(1, 2, 20, 0));
         lowerPanel.setBackground(PAGE_BG);
         Map<String, Integer> attData = dao.getAttendanceSummary();
@@ -346,7 +394,6 @@ public class AdminDashboard extends JFrame {
         return dash;
     }
 
-    // ── Stat Card ──────────────────────────────────────────────────────────────
     private JLabel makeCountLabel(String text) {
         JLabel lbl = new JLabel(text);
         lbl.setFont(new Font("SansSerif", Font.BOLD, 34));
@@ -361,10 +408,8 @@ public class AdminDashboard extends JFrame {
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                // Shadow
                 g2.setColor(shadowColor);
                 g2.fillRoundRect(4, 6, getWidth() - 8, getHeight() - 6, 16, 16);
-                // Card
                 g2.setColor(CARD_BG);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16);
                 g2.dispose();
@@ -372,18 +417,6 @@ public class AdminDashboard extends JFrame {
         };
         card.setOpaque(false);
         card.setBorder(new EmptyBorder(22, 24, 22, 24));
-
-        // Hover effect: elevate shadow
-        card.addMouseListener(new java.awt.event.MouseAdapter() {
-            public void mouseEntered(java.awt.event.MouseEvent e) {
-                card.setBorder(new EmptyBorder(20, 24, 24, 24));
-                card.repaint();
-            }
-            public void mouseExited(java.awt.event.MouseEvent e) {
-                card.setBorder(new EmptyBorder(22, 24, 22, 24));
-                card.repaint();
-            }
-        });
 
         JPanel textPanel = new JPanel(new GridLayout(3, 1, 0, 4));
         textPanel.setBackground(CARD_BG);
@@ -403,7 +436,6 @@ public class AdminDashboard extends JFrame {
 
         card.add(textPanel, BorderLayout.CENTER);
 
-        // Left accent stripe
         JPanel stripe = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
@@ -420,10 +452,8 @@ public class AdminDashboard extends JFrame {
         return card;
     }
 
-    // ── Attendance Summary Card ────────────────────────────────────────────────
     private JPanel buildAttendanceSummaryCard(Map<String, Integer> data) {
         JPanel card = createBaseCard("📊  Attendance Overview");
-
         JPanel bars = new JPanel(new GridLayout(3, 1, 0, 12));
         bars.setBackground(CARD_BG);
         bars.setBorder(new EmptyBorder(16, 24, 24, 24));
@@ -473,10 +503,8 @@ public class AdminDashboard extends JFrame {
         return row;
     }
 
-    // ── Alerts Card ────────────────────────────────────────────────────────────
     private JPanel buildAlertsCard(List<String> alerts) {
         JPanel card = createBaseCard("🔔  System Alerts");
-
         JPanel list = new JPanel();
         list.setLayout(new BoxLayout(list, BoxLayout.Y_AXIS));
         list.setBackground(CARD_BG);
@@ -500,7 +528,6 @@ public class AdminDashboard extends JFrame {
         return card;
     }
 
-    // ── Base card factory ──────────────────────────────────────────────────────
     private JPanel createBaseCard(String headerText) {
         JPanel card = new JPanel(new BorderLayout()) {
             @Override
@@ -531,7 +558,6 @@ public class AdminDashboard extends JFrame {
         return card;
     }
 
-    // ── Refresh ────────────────────────────────────────────────────────────────
     private void refreshDashboard() {
         DashboardDAO dao = new DashboardDAO();
         if (stdCountLabel     != null) stdCountLabel.setText(String.valueOf(dao.getTotalStudents()));
@@ -558,4 +584,4 @@ public class AdminDashboard extends JFrame {
             alertsListPanel.repaint();
         }
     }
-}
+}

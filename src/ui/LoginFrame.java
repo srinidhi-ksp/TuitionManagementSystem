@@ -326,13 +326,20 @@ public class LoginFrame extends JFrame {
                             sessionUserName = s.getName();
                         }
                     }
-                } else if ("Teacher".equalsIgnoreCase(role)) {
-                    model.Teacher t = new dao.TeacherDAO().getTeacherById(user.getUserId());
+                } else if ("Teacher".equalsIgnoreCase(role) || "Admin".equalsIgnoreCase(role)) {
+                    // Fetch from teachers collection for both Teacher and Admin roles
+                    model.Teacher t = new dao.TeacherDAO().getByUserId(user.getUserId());
+                    System.out.println("[LoginFrame] Debug - User ID: " + user.getUserId());
+                    System.out.println("[LoginFrame] Debug - Teacher Found: " + t);
+                    
                     if (t != null) {
                         sessionUserId = t.getUserId();
                         if (t.getName() != null && !t.getName().trim().isEmpty()) {
                             sessionUserName = t.getName();
                         }
+                    } else {
+                        // Fallback to email if teacher profile not found
+                        sessionUserName = user.getEmail();
                     }
                 }
 
@@ -356,7 +363,7 @@ public class LoginFrame extends JFrame {
     private void openDashboard(User user) {
         String role = user.getRole();
         if ("Admin".equalsIgnoreCase(role)) {
-            new AdminDashboard().setVisible(true);
+            new AdminDashboard(user).setVisible(true);
             dispose();
         } else if ("Student".equalsIgnoreCase(role)) {
             new ui.student.StudentDashboard(user).setVisible(true);

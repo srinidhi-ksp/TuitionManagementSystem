@@ -126,14 +126,8 @@ public class Batch {
 
     @Override
     public String toString() {
-        return "Batch [batchId=" + batchId +
-                ", subjectId=" + subjectId +
-                ", teacherUserId=" + teacherUserId +
-                ", batchName=" + batchName +
-                ", timing=" + timing +
-                ", startTime=" + startTime +
-                ", endTime=" + endTime +
-                ", meetingLink=" + meetingLink +
-                ", classMode=" + classMode + "]";
+        String classNameSafe = (category != null) ? category : "";
+        return batchId + " - " + (batchName != null ? batchName : "") +
+               (classNameSafe.isEmpty() ? "" : " (" + classNameSafe + ")");
     }
 }

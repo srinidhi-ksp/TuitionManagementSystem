@@ -5,6 +5,7 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.util.Calendar;
 import java.util.List;
 import dao.BatchDAO;
 import dao.SubjectDAO;
@@ -122,7 +123,7 @@ public class BatchManagementFrame extends JPanel {
         String title = isEditMode ? "Edit Batch — " + editTarget.getBatchName() : "Add New Batch";
 
         JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), title, true);
-        dialog.setSize(600, 520);
+        dialog.setSize(600, 560);
         dialog.setLocationRelativeTo(this);
         dialog.getContentPane().setBackground(CARD_BG);
         dialog.setLayout(new BorderLayout());
@@ -139,21 +140,24 @@ public class BatchManagementFrame extends JPanel {
 
         JComboBox<String> teacherCombo = new JComboBox<>();
         teacherCombo.addItem("Select Teacher");
-        for (Teacher t : new TeacherDAO().getAllTeachers())
+        // Always load ALL teachers as per requirement
+        for (Teacher t : new TeacherDAO().getAllTeachers()) {
             teacherCombo.addItem(t.getUserId() + " – " + (t.getName() != null ? t.getName() : t.getSpecialization()));
+        }
 
         JTextField nameField  = styledField();
         TimeChooser startPicker = new TimeChooser();
         TimeChooser endPicker   = new TimeChooser();
         JTextField linkField  = styledField();
-        JComboBox<String> modeCombo = new JComboBox<>(new String[]{"Online", "Offline"});
-        JComboBox<String> classLevelCombo = new JComboBox<>(new String[]{"Class 10", "Class 11", "Class 12"});
+        JComboBox<String> modeCombo = new JComboBox<>(new String[]{"Select Mode", "Online", "Offline"});
+        JComboBox<String> classLevelCombo = new JComboBox<>(new String[]{"Select Class", "Class 10", "Class 11", "Class 12"});
 
         if (isEditMode) {
             nameField.setText(editTarget.getBatchName());
             linkField.setText(editTarget.getMeetingLink());
             modeCombo.setSelectedItem(editTarget.getClassMode());
             classLevelCombo.setSelectedItem(editTarget.getCategory());
+            
             // Pre-select combos
             for (int i=0; i<subjectCombo.getItemCount(); i++)
                 if (subjectCombo.getItemAt(i).startsWith(editTarget.getSubjectId() + " –")) subjectCombo.setSelectedIndex(i);
@@ -163,8 +167,12 @@ public class BatchManagementFrame extends JPanel {
             if (editTarget.getStartTime() != null) startPicker.setTime(editTarget.getStartTime());
             if (editTarget.getEndTime() != null) endPicker.setTime(editTarget.getEndTime());
         } else {
-            startPicker.setTime("09:00");
-            endPicker.setTime("11:00");
+            Calendar cal = Calendar.getInstance();
+            cal.set(Calendar.HOUR_OF_DAY, 9);
+            cal.set(Calendar.MINUTE, 0);
+            startPicker.setTime(cal.getTime());
+            cal.set(Calendar.HOUR_OF_DAY, 11);
+            endPicker.setTime(cal.getTime());
         }
 
         form.add(formRow("Batch Name",          nameField));
@@ -230,6 +238,7 @@ public class BatchManagementFrame extends JPanel {
         dialog.add(btnRow, BorderLayout.SOUTH);
         dialog.setVisible(true);
     }
+
 
     private void styleTable(JTable t) {
         t.setFont(new Font("SansSerif", Font.PLAIN, 13));

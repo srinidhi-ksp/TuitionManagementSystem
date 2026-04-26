@@ -4,10 +4,8 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import dao.BatchDAO;
 import dao.EnrollmentDAO;
@@ -39,14 +37,31 @@ public class FeeService {
 
     private dao.StudentDAO studentDAO = new dao.StudentDAO();
 
+    /**
+     * CRITICAL: Resolves student ID from User ID if necessary
+     * user_id (e.g., U21) → student_id (e.g., S001)
+     */
     private String resolveStudentId(String id) {
-        if (id == null) return null;
-        if (id.startsWith("S")) return id;
+        if (id == null) {
+            System.err.println("[FeeService] ❌ resolveStudentId: Input ID is NULL");
+            return null;
+        }
         
-        System.out.println("User ID: " + id);
+        if (id.startsWith("S")) {
+            System.out.println("[FeeService] ID already student_id: " + id);
+            return id;
+        }
+        
+        System.out.println("[FeeService] 🔄 Resolving user_id -> student_id for: " + id);
+        
         model.Student s = studentDAO.getStudentByUserId(id);
-        String studentId = (s != null) ? s.getUserId() : id;
-        System.out.println("Mapped Student ID: " + studentId);
+        if (s == null) {
+            System.err.println("[FeeService] ❌ Failed to map user_id " + id + " to student");
+            return id;
+        }
+        
+        String studentId = s.getUserId(); // This is student._id
+        System.out.println("[FeeService] ✅ Mapped " + id + " → " + studentId);
         
         return studentId;
     }
@@ -61,49 +76,52 @@ public class FeeService {
         List<SubjectFeeDTO> feeDetails = new ArrayList<>();
         
         try {
-            // STEP 1: Fetch active enrollments
+            // STEP 1: Fetch ALL active enrollments
             List<Enrollment> enrollments = enrollmentDAO.getEnrollmentsByStudentId(studentId);
-            if (enrollments == null || enrollments.isEmpty()) {
-                System.out.println("[FeeService] ⚠️  No active enrollments found for student: " + studentId);
+            System.out.println("[FeeService] DEBUG - Enrollments found: " + enrollments.size());
+
+            if (enrollments.isEmpty()) {
+                System.out.println("[FeeService] ⚠️  No enrollments for student: " + studentId);
                 return feeDetails;
             }
-            System.out.println("[FeeService] Found " + enrollments.size() + " enrollments");
 
-            // STEP 2 & 3: Extract UNIQUE subject_ids (avoid duplicates)
-            Set<Integer> uniqueSubjectIds = new HashSet<>();
+            // STEP 2: Collect Batch IDs
+            List<Integer> batchIds = new ArrayList<>();
+            for (Enrollment e : enrollments) {
+                batchIds.add(e.getBatchId());
+            }
+            System.out.println("[FeeService] DEBUG - Batch IDs: " + batchIds);
+
+            // STEP 3 & 4: Process each enrollment (allowing duplicates of same subject in different batches)
             for (Enrollment enrollment : enrollments) {
-                int batchId = enrollment.getBatchId();
-                Batch batch = batchDAO.getBatchById(batchId);
+                Batch batch = batchDAO.getBatchById(enrollment.getBatchId());
                 
                 if (batch != null) {
-                    uniqueSubjectIds.add(batch.getSubjectId());
-                    System.out.println("[FeeService]   - Batch " + batchId + " → Subject " + batch.getSubjectId());
+                    Subject subject = subjectDAO.getSubjectById(batch.getSubjectId());
+                    
+                    if (subject != null) {
+                        // Check payment status in payments collection
+                        boolean isPaid = paymentDAO.isSubjectPaid(studentId, String.valueOf(subject.getSubjectId()));
+                        String status = isPaid ? "PAID" : "UNPAID";
+                        
+                        // Use "Subject Name (Batch Name)" for clear identification
+                        String displayName = subject.getSubjectName() + " (" + batch.getBatchName() + ")";
+                        
+                        SubjectFeeDTO dto = new SubjectFeeDTO(
+                            String.valueOf(subject.getSubjectId()), 
+                            displayName, 
+                            subject.getMonthlyFee(), 
+                            status,
+                            batch.getBatchId()
+                        );
+                        feeDetails.add(dto);
+                        
+                        System.out.println("[FeeService]   -> Added: " + displayName + " | Status: " + status);
+                    }
                 }
             }
 
-            System.out.println("[FeeService] Unique subjects found: " + uniqueSubjectIds.size());
-
-            // STEP 4, 5, 6: For each unique subject, get details and check payment
-            for (int subjectId : uniqueSubjectIds) {
-                Subject subject = subjectDAO.getSubjectById(subjectId);
-                
-                if (subject != null) {
-                    double monthlyFee = subject.getMonthlyFee();
-                    String subjectName = subject.getSubjectName();
-                    
-                    // Check if this subject is paid
-                    boolean isPaid = paymentDAO.isSubjectPaid(studentId, String.valueOf(subjectId));
-                    String status = isPaid ? "PAID" : "UNPAID";
-                    
-                    System.out.println("[FeeService]   Subject: " + subjectName + 
-                                     " | Fee: Rs. " + monthlyFee + " | Status: " + status);
-                    
-                    SubjectFeeDTO dto = new SubjectFeeDTO(String.valueOf(subjectId), subjectName, monthlyFee, status);
-                    feeDetails.add(dto);
-                }
-            }
-
-            System.out.println("[FeeService] ✅ Fee details compiled: " + feeDetails.size() + " subjects");
+            System.out.println("[FeeService] ✅ Final fee details size: " + feeDetails.size());
             
         } catch (Exception e) {
             System.err.println("[FeeService] ❌ Error fetching fee details: " + e.getMessage());

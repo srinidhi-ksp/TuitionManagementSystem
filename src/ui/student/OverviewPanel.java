@@ -1,13 +1,25 @@
 package ui.student;
 
-import javax.swing.*;
-import javax.swing.border.EmptyBorder;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Cursor;
+import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.GridLayout;
+import java.awt.RenderingHints;
 import java.util.List;
 
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.SwingWorker;
+import javax.swing.border.EmptyBorder;
+
 import model.Batch;
-import dao.EnrollmentDAO;
-import util.SessionManager;
 
 public class OverviewPanel extends JPanel {
 
@@ -179,9 +191,19 @@ public class OverviewPanel extends JPanel {
         new SwingWorker<List<Batch>, Void>() {
             @Override
             protected List<Batch> doInBackground() throws Exception {
-                String userId = util.SessionManager.getInstance().getUserId();
-                System.out.println("[OverviewPanel] Loading data for student: " + userId);
-                return studentService.getActiveBatches(userId);
+                String userIdFromSession = util.SessionManager.getInstance().getUserId();
+                System.out.println("[OverviewPanel] 🔄 Loading dashboard for user: " + userIdFromSession);
+                
+                if (userIdFromSession == null) {
+                    System.err.println("[OverviewPanel] ❌ User ID is null!");
+                    return new java.util.ArrayList<>();
+                }
+                
+                // studentService.getActiveBatches() will internally resolve user_id → student_id
+                List<Batch> batches = studentService.getActiveBatches(userIdFromSession);
+                System.out.println("[OverviewPanel] ✅ Found " + (batches != null ? batches.size() : 0) + " active batches");
+                
+                return batches;
             }
 
             @Override
@@ -189,6 +211,8 @@ public class OverviewPanel extends JPanel {
                 try {
                     List<Batch> enrolled = get();
                     int batchCount = enrolled != null ? enrolled.size() : 0;
+                    
+                    System.out.println("[OverviewPanel] Updating stats with " + batchCount + " batches");
                     
                     String userName = util.SessionManager.getInstance().getUserName();
                     title.setText("Welcome back, " + (userName != null ? userName : "Student") + "!");

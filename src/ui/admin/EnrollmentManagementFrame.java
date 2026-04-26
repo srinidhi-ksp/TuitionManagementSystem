@@ -164,35 +164,12 @@ public class EnrollmentManagementFrame extends JPanel {
         for (Student s : new StudentDAO().getAllStudents())
             studentCombo.addItem(s.getUserId() + " – " + (s.getName() != null ? s.getName() : "(unnamed)"));
 
-        JComboBox<String> batchCombo = new JComboBox<>();
-        batchCombo.addItem("Select Batch");
-
-        studentCombo.addActionListener(e -> {
-            String selS = (String) studentCombo.getSelectedItem();
-            if (selS == null || selS.startsWith("Select")) {
-                batchCombo.removeAllItems();
-                batchCombo.addItem("Select Batch");
-                return;
-            }
-
-            String studentId = selS.split(" – ")[0].trim();
-            
-            // USE THE NEW FILTERING METHOD
-            BatchDAO bDao = new BatchDAO();
-            List<Batch> filteredBatches = bDao.getBatchesForStudent(studentId);
-            
-            batchCombo.removeAllItems();
-            batchCombo.addItem("Select Batch");
-            
-            if (filteredBatches.isEmpty()) {
-                batchCombo.addItem("No batches available for this class");
-                // Disable save if needed, or handled via validation
-            } else {
-                for (Batch b : filteredBatches) {
-                    batchCombo.addItem(b.getBatchId() + " – " + b.getBatchName());
-                }
-            }
-        });
+        // Load all batches without filtering
+        JComboBox<Batch> batchCombo = new JComboBox<>();
+        List<Batch> batches = new BatchDAO().getAllBatches();
+        for (Batch batch : batches) {
+            batchCombo.addItem(batch);
+        }
 
         DateChooser dateChooser = new DateChooser();
         JComboBox<String> statusCombo = new JComboBox<>(new String[]{"Active", "Inactive", "Completed", "Cancelled"});
@@ -204,12 +181,14 @@ public class EnrollmentManagementFrame extends JPanel {
                     break;
                 }
             
-            // Re-select batch in the filtered list
-            for (int i=0; i<batchCombo.getItemCount(); i++)
-                if (batchCombo.getItemAt(i).startsWith(editTarget.getBatchId() + " –")) {
+            // Re-select batch
+            for (int i=0; i<batchCombo.getItemCount(); i++) {
+                Batch b = batchCombo.getItemAt(i);
+                if (b != null && b.getBatchId() == editTarget.getBatchId()) {
                     batchCombo.setSelectedIndex(i);
                     break;
                 }
+            }
                 
             statusCombo.setSelectedItem(editTarget.getStatus());
             if (editTarget.getEnrollmentDate() != null) dateChooser.setDate(editTarget.getEnrollmentDate());
@@ -227,14 +206,16 @@ public class EnrollmentManagementFrame extends JPanel {
         btnRow.add(makeAccentButton(btnText, e -> {
             try {
                 String selS = studentCombo.getSelectedItem().toString();
-                String selB = batchCombo.getSelectedItem().toString();
-                if (selS.startsWith("Select") || selB.startsWith("Select") || selB.contains("No batches")) {
+                Batch selB = (Batch) batchCombo.getSelectedItem();
+                
+                if (selS.startsWith("Select") || selB == null) {
                     JOptionPane.showMessageDialog(dialog, "Please select student and a valid batch."); return;
                 }
+                
                 Enrollment en = isEditMode ? editTarget : new Enrollment();
                 if (!isEditMode) en.setEnrollmentId((int)(System.currentTimeMillis() % 100000));
                 en.setStudentUserId(selS.split(" – ")[0].trim());
-                en.setBatchId(Integer.parseInt(selB.split(" – ")[0].trim()));
+                en.setBatchId(selB.getBatchId());
                 en.setStatus(statusCombo.getSelectedItem().toString());
                 en.setEnrollmentDate(dateChooser.getDate());
 

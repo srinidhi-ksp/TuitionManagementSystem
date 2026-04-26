@@ -98,6 +98,23 @@ public class StudentDashboard extends JFrame {
         popupMenu.setBackground(Color.WHITE);
         popupMenu.setBorder(BorderFactory.createLineBorder(new Color(220, 225, 240)));
         
+        JMenuItem profileItem = new JMenuItem("  My Profile  ");
+        profileItem.addActionListener(e -> {
+            cardLayout.show(mainContentPanel, "Profile");
+            // Update sidebar active button
+            for (Component c : sidebarPanel.getComponents()) {
+                if (c instanceof JButton) {
+                    JButton b = (JButton) c;
+                    if (b.getText().contains("Profile")) {
+                        if (activeBtn != null) activeBtn.setForeground(new Color(255, 255, 255, 180));
+                        activeBtn = b;
+                        b.setForeground(Color.WHITE);
+                    }
+                }
+            }
+            repaint();
+        });
+        
         JMenuItem logoutItem = new JMenuItem("  Logout  ");
         logoutItem.setForeground(new Color(220, 50, 50));
         logoutItem.addActionListener(e -> {
@@ -105,8 +122,8 @@ public class StudentDashboard extends JFrame {
             dispose();
             new LoginFrame().setVisible(true);
         });
-        
-        popupMenu.add(new JMenuItem("  My Profile  "));
+
+        popupMenu.add(profileItem);
         popupMenu.addSeparator();
         popupMenu.add(logoutItem);
         profileBtn.addActionListener(e -> popupMenu.show(profileBtn, 0, profileBtn.getHeight()));

@@ -3,35 +3,32 @@ package ui.student;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.Frame;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GridLayout;
 import java.awt.RenderingHints;
-import java.awt.Cursor;
 import java.util.List;
 import java.util.Map;
 
+import javax.swing.AbstractCellEditor;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
-import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableCellEditor;
-import javax.swing.AbstractCellEditor;
-import javax.swing.JOptionPane;
-import javax.swing.SwingUtilities;
-import javax.swing.JCheckBox;
-import javax.swing.DefaultCellEditor;
-import java.awt.Frame;
-import java.awt.Insets;
+import javax.swing.table.TableCellRenderer;
 
 import model.SubjectFeeDTO;
 import service.FeeService;
@@ -274,8 +271,14 @@ public class FeesPanel extends JPanel {
     }
 
     private void loadData() {
-        String studentId = SessionManager.getInstance().getUserId();
-        if (studentId == null) return;
+        String userIdFromSession = SessionManager.getInstance().getUserId();
+        if (userIdFromSession == null) {
+            System.err.println("[FeesPanel] ❌ User ID is null in session!");
+            return;
+        }
+
+        System.out.println("[FeesPanel] 🔄 Starting loadData...");
+        System.out.println("[FeesPanel] User ID from session: " + userIdFromSession);
 
         new javax.swing.SwingWorker<Void, Void>() {
             List<SubjectFeeDTO> fees;
@@ -283,8 +286,19 @@ public class FeesPanel extends JPanel {
 
             @Override
             protected Void doInBackground() throws Exception {
-                fees = feeService.getStudentFeeDetails(studentId);
-                summary = feeService.getFeeSummary(studentId);
+                // FeeService will internally resolve user_id → student_id
+                System.out.println("[FeesPanel] Calling feeService.getStudentFeeDetails()...");
+                fees = feeService.getStudentFeeDetails(userIdFromSession);
+                
+                System.out.println("[FeesPanel] Calling feeService.getFeeSummary()...");
+                summary = feeService.getFeeSummary(userIdFromSession);
+                
+                System.out.println("[FeesPanel] 📊 Summary: " + (summary != null ? "OK" : "NULL"));
+                if (summary != null) {
+                    System.out.println("[FeesPanel]   - Status: " + summary.get("status"));
+                    System.out.println("[FeesPanel]   - Total Fee: " + summary.get("totalFee"));
+                    System.out.println("[FeesPanel]   - Fees count: " + (fees != null ? fees.size() : 0));
+                }
                 return null;
             }
 
@@ -301,9 +315,12 @@ public class FeesPanel extends JPanel {
                         String status = (String) summary.get("status");
                         statusCard.setText(status);
                         statusCard.setForeground("PAID".equals(status) ? SUCCESS_GREEN : ERROR_RED);
+                        
+                        System.out.println("[FeesPanel] ✅ Status card updated: " + status);
                     }
 
-                    if (fees != null) {
+                    if (fees != null && !fees.isEmpty()) {
+                        System.out.println("[FeesPanel] Populating table with " + fees.size() + " fee records");
                         for (SubjectFeeDTO f : fees) {
                             tableModel.addRow(new Object[]{
                                 f.getSubjectName(), 
@@ -313,8 +330,18 @@ public class FeesPanel extends JPanel {
                                 f.getSubjectId()
                             });
                         }
+                    } else {
+                        System.out.println("[FeesPanel] ⚠️  No fees found - checking if this is enrollment issue...");
+                        // Only show "No Enrollment" if the mapping actually succeeded but no enrollments exist
+                        String statusMsg = summary != null ? (String) summary.get("status") : "UNKNOWN";
+                        if ("NO_ENROLLMENT".equals(statusMsg)) {
+                            tableModel.addRow(new Object[]{"No active enrollments found", "", "", "", ""});
+                        } else {
+                            tableModel.addRow(new Object[]{"Error: Unable to load fee data", "", "", "", ""});
+                        }
                     }
                 } catch (Exception e) {
+                    System.err.println("[FeesPanel] ❌ Error in loadData done(): " + e.getMessage());
                     e.printStackTrace();
                 }
             }

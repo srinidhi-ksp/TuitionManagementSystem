@@ -69,8 +69,8 @@ public class SettingsFrame extends JPanel {
         wrapper.setBorder(new EmptyBorder(0, 40, 40, 40));
 
         // Custom tab bar
-        String[] tabNames = {"General", "System Info", "Preferences"};
-        JPanel[] tabPanels = {buildGeneralTab(), buildSystemInfoTab(), buildPreferencesTab()};
+        String[] tabNames = {"General", "System Info"}; // "Preferences" removed
+        JPanel[] tabPanels = {buildGeneralTab(), buildSystemInfoTab()}; // buildPreferencesTab() hidden
 
         CardLayout cl = new CardLayout();
         JPanel contentArea = new JPanel(cl);

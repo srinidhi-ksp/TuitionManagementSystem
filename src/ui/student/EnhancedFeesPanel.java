@@ -124,18 +124,20 @@ public class EnhancedFeesPanel extends JPanel {
     private void loadFeeData() {
         try {
             if (currentUser == null || currentUser.getUserId() == null) {
-                System.err.println("[EnhancedFeesPanel] User ID is null!");
+                System.err.println("[EnhancedFeesPanel] ❌ User or User ID is null!");
                 return;
             }
 
-            String studentId = currentUser.getUserId();
-            System.out.println("[EnhancedFeesPanel] Loading fees for student: " + studentId);
+            String userIdFromSession = currentUser.getUserId();
+            System.out.println("[EnhancedFeesPanel] 🔄 Loading fees for user: " + userIdFromSession);
 
-            // Get fee details
-            List<SubjectFeeDTO> feeDetails = feeService.getStudentFeeDetails(studentId);
+            // FeeService will internally resolve user_id → student_id
+            List<SubjectFeeDTO> feeDetails = feeService.getStudentFeeDetails(userIdFromSession);
+            System.out.println("[EnhancedFeesPanel] 📊 Fee details retrieved: " + (feeDetails != null ? feeDetails.size() : 0) + " subjects");
             
             // Get summary
-            Map<String, Object> summary = feeService.getFeeSummary(studentId);
+            Map<String, Object> summary = feeService.getFeeSummary(userIdFromSession);
+            System.out.println("[EnhancedFeesPanel] Summary status: " + (summary != null ? summary.get("status") : "NULL"));
 
             // Update summary cards
             double totalFee = (double) summary.get("totalFee");
@@ -153,6 +155,7 @@ public class EnhancedFeesPanel extends JPanel {
 
             // Populate table
             if (feeDetails != null && !feeDetails.isEmpty()) {
+                System.out.println("[EnhancedFeesPanel] Populating table with " + feeDetails.size() + " fee records");
                 for (SubjectFeeDTO fee : feeDetails) {
                     Object[] row = {
                         fee.getSubjectName(),
@@ -162,12 +165,13 @@ public class EnhancedFeesPanel extends JPanel {
                     tableModel.addRow(row);
                 }
             } else {
+                System.out.println("[EnhancedFeesPanel] ⚠️  No fee details to display");
                 Object[] row = {"No subjects enrolled", "", ""};
                 tableModel.addRow(row);
             }
 
         } catch (Exception e) {
-            System.err.println("[EnhancedFeesPanel] Error loading fee data: " + e.getMessage());
+            System.err.println("[EnhancedFeesPanel] ❌ Error loading fee data: " + e.getMessage());
             e.printStackTrace();
             Object[] row = {"Error loading data", "", ""};
             tableModel.setRowCount(0);

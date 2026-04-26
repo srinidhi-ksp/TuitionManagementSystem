@@ -263,19 +263,8 @@ public class PDFReceiptGenerator {
             new Font(Font.FontFamily.HELVETICA, 11, Font.ITALIC, TEXT_LIGHT));
         footerText.setAlignment(Element.ALIGN_CENTER);
         document.add(footerText);
-
-        document.add(new Paragraph("\n\n"));
-
-        Paragraph signatureLine = new Paragraph("_________________________", 
-            new Font(Font.FontFamily.HELVETICA, 9, Font.NORMAL, TEXT_LIGHT));
-        signatureLine.setAlignment(Element.ALIGN_CENTER);
-        document.add(signatureLine);
-
-        Paragraph signatureLabel = new Paragraph("Authorized Signature", 
-            new Font(Font.FontFamily.HELVETICA, 8, Font.NORMAL, TEXT_LIGHT));
-        signatureLabel.setAlignment(Element.ALIGN_CENTER);
-        document.add(signatureLabel);
     }
+
 
     /**
      * Add a detail row to a table

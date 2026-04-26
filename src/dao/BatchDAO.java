@@ -8,6 +8,7 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.Sorts;
 
 import model.Batch;
 import model.Student;
@@ -52,7 +53,7 @@ public class BatchDAO {
         List<Batch> list = new ArrayList<>();
         if (batchCollection == null) return list;
 
-        try (MongoCursor<Document> cursor = batchCollection.find().iterator()) {
+        try (MongoCursor<Document> cursor = batchCollection.find().sort(Sorts.ascending("standard", "batch_name")).iterator()) {
             while (cursor.hasNext()) {
                 Document doc = cursor.next();
                 Batch b = DocumentMapper.documentToBatch(doc);

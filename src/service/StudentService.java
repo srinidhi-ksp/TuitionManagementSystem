@@ -2,12 +2,12 @@ package service;
 
 import java.util.ArrayList;
 import java.util.List;
-import dao.EnrollmentDAO;
+
 import dao.BatchDAO;
+import dao.EnrollmentDAO;
 import dao.SubjectDAO;
-import model.Enrollment;
 import model.Batch;
-import model.Subject;
+import model.Enrollment;
 
 public class StudentService {
 
@@ -24,17 +24,31 @@ public class StudentService {
     private dao.StudentDAO studentDAO = new dao.StudentDAO();
 
     /**
-     * Resolves student ID from User ID if necessary
+     * CRITICAL: Resolves student ID from User ID if necessary
+     * user_id (e.g., U21) → student_id (e.g., S001)
      */
     private String resolveStudentId(String id) {
-        if (id == null) return null;
-        if (id.startsWith("S")) return id; // Already a student ID
+        if (id == null) {
+            System.err.println("[StudentService] ❌ resolveStudentId: Input ID is NULL");
+            return null;
+        }
         
-        System.out.println("User ID: " + id);
+        if (id.startsWith("S")) {
+            System.out.println("[StudentService] ID already student_id: " + id);
+            return id; // Already a student ID
+        }
+        
+        System.out.println("[StudentService] 🔄 Resolving user_id -> student_id for: " + id);
+        
         // Try to find student by user_id
         model.Student s = studentDAO.getStudentByUserId(id);
-        String studentId = (s != null) ? s.getUserId() : id;
-        System.out.println("Mapped Student ID: " + studentId);
+        if (s == null) {
+            System.err.println("[StudentService] ❌ Failed to map user_id " + id + " to student");
+            return id; // Return as-is, let DAO handle it
+        }
+        
+        String studentId = s.getUserId(); // This is student._id (e.g., S001)
+        System.out.println("[StudentService] ✅ Mapped " + id + " → " + studentId);
         
         return studentId;
     }
