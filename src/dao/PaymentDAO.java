@@ -134,4 +134,31 @@ public class PaymentDAO {
             return false;
         }
     }
+    /**
+     * Get recent payments for a student
+     */
+    public java.util.List<Payment> getRecentPayments(String studentId, int limit) {
+        java.util.List<Payment> list = new java.util.ArrayList<>();
+        if (paymentCollection == null) return list;
+        try {
+            com.mongodb.client.MongoCursor<Document> cursor = paymentCollection.find(com.mongodb.client.model.Filters.eq("student_id", studentId))
+                .sort(new Document("payment_date", -1))
+                .limit(limit)
+                .iterator();
+            while (cursor.hasNext()) {
+                Document doc = cursor.next();
+                Payment p = new Payment();
+                p.setStudentId(doc.getString("student_id"));
+                p.setSubjectId(doc.getString("subject_id"));
+                p.setAmountPaid(doc.getDouble("amount_paid"));
+                p.setPaymentMode(doc.getString("payment_mode"));
+                p.setPaymentDate(doc.getDate("payment_date"));
+                p.setMonth(doc.getInteger("month"));
+                list.add(p);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
 }

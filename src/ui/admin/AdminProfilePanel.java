@@ -163,13 +163,24 @@ public class AdminProfilePanel extends JPanel {
 
     private java.util.Map<String, String> getTeacherInfoMap() {
         java.util.Map<String, String> map = new java.util.LinkedHashMap<>();
-        map.put("Teacher ID:", currentUser.getUserId());
-        map.put("Specialization:", teacher != null ? teacher.getSpecialization() : "N/A");
-        map.put("Qualifications:", (teacher != null && teacher.getQualifications() != null) ? String.join(", ", teacher.getQualifications()) : "N/A");
         
-        // Calculate Experience accurately using java.time
+        // Fetch real data from the teacher object if available
+        String teacherId = (teacher != null && teacher.getUserId() != null) ? teacher.getUserId() : currentUser.getUserId();
+        map.put("Teacher ID:", teacherId);
+        
+        String spec = (teacher != null && teacher.getSpecialization() != null) ? teacher.getSpecialization() : "N/A";
+        map.put("Specialization:", spec);
+        
+        String quals = (teacher != null && teacher.getQualifications() != null && !teacher.getQualifications().isEmpty()) 
+                       ? String.join(", ", teacher.getQualifications()) : "N/A";
+        map.put("Qualifications:", quals);
+        
+        // Use experience_years from database if available
         String experience = "N/A";
-        if (currentUser.getCreatedAt() != null) {
+        if (teacher != null && teacher.getExperienceYears() != null && teacher.getExperienceYears() > 0) {
+            experience = teacher.getExperienceYears() + " years";
+        } else if (currentUser.getCreatedAt() != null) {
+            // Fallback calculation from join date if experience_years is missing
             java.time.LocalDate joinDate = currentUser.getCreatedAt().toInstant()
                 .atZone(java.time.ZoneId.systemDefault())
                 .toLocalDate();
@@ -177,27 +188,30 @@ public class AdminProfilePanel extends JPanel {
             java.time.Period period = java.time.Period.between(joinDate, today);
 
             int years = period.getYears();
-            int months = period.getMonths();
-            int days = period.getDays();
-
             if (years > 0) {
                 experience = years + (years == 1 ? " year" : " years");
-            } else if (months > 0) {
-                experience = months + (months == 1 ? " month" : " months");
+            } else if (period.getMonths() > 0) {
+                experience = period.getMonths() + (period.getMonths() == 1 ? " month" : " months");
             } else {
-                experience = days + (days == 1 ? " day" : " days");
+                experience = period.getDays() + (period.getDays() == 1 ? " day" : " days");
             }
         }
         map.put("Experience:", experience);
 
-        map.put("Join Date:", (teacher != null && teacher.getJoinDate() != null) ? new java.text.SimpleDateFormat("dd MMM yyyy").format(teacher.getJoinDate()) : "N/A");
+        String joinDateStr = "N/A";
+        java.util.Date joinDateObj = (teacher != null && teacher.getJoinDate() != null) ? teacher.getJoinDate() : currentUser.getCreatedAt();
+        if (joinDateObj != null) {
+            joinDateStr = new java.text.SimpleDateFormat("dd MMM yyyy").format(joinDateObj);
+        }
+        map.put("Join Date:", joinDateStr);
+        
         return map;
     }
 
     private java.util.Map<String, String> getContactInfoMap() {
         java.util.Map<String, String> map = new java.util.LinkedHashMap<>();
         map.put("Phone:", (teacher != null && teacher.getPhone() != null) ? teacher.getPhone() : safe(currentUser.getPhone()));
-        map.put("Email:", currentUser.getEmail());
+        map.put("Email:", (teacher != null && teacher.getEmail() != null) ? teacher.getEmail() : currentUser.getEmail());
         if (teacher != null && teacher.getCity() != null) {
             map.put("City:", teacher.getCity());
         }

@@ -10,13 +10,17 @@ import java.awt.Font;
 import java.awt.Frame;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.GridLayout;
+import java.awt.Insets;
 import java.awt.RenderingHints;
 import java.text.SimpleDateFormat;
 import java.util.List;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
@@ -24,8 +28,10 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
 import javax.swing.JScrollPane;
+import javax.swing.JSpinner;
 import javax.swing.JTable;
 import javax.swing.JTextField;
+import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableCellRenderer;
@@ -37,6 +43,7 @@ import javax.swing.text.DocumentFilter;
 
 import dao.CounterDAO;
 import dao.TeacherDAO;
+import dao.TeacherFilterDAO;
 import dao.UserDAO;
 import model.Teacher;
 import model.User;
@@ -56,6 +63,10 @@ public class TeacherManagementFrame extends JPanel {
     private DefaultTableModel model;
     private List<Teacher> currentTeachers;
     private static final SimpleDateFormat DATE_FMT = new SimpleDateFormat("dd-MMM-yyyy");
+
+    // ── Filter components ──
+    private JComboBox<String> specializationCombo, experienceCombo, cityCombo, salaryCombo;
+    private JTextField searchField;
 
     public TeacherManagementFrame() {
         setLayout(new BorderLayout());
@@ -97,9 +108,12 @@ public class TeacherManagementFrame extends JPanel {
         card.setBackground(CARD_BG);
         card.setBorder(BorderFactory.createLineBorder(new Color(225, 230, 240), 1, true));
 
-        String[] cols = {"Teacher Name", "Specialization", "City", "Join Date", "Actions"};
+        // ── FILTER BAR ──
+        card.add(createFilterBar(), BorderLayout.NORTH);
+
+        String[] cols = {"Teacher Name", "Specialization", "Experience", "Salary", "Degree", "City", "Join Date", "Actions"};
         model = new DefaultTableModel(cols, 0) {
-            @Override public boolean isCellEditable(int r, int c) { return c == 4; }
+            @Override public boolean isCellEditable(int r, int c) { return c == 7; }
         };
         teacherTable = new JTable(model);
         styleTable(teacherTable);
@@ -132,30 +146,187 @@ public class TeacherManagementFrame extends JPanel {
                 }
             }
         };
-        teacherTable.getColumnModel().getColumn(4).setCellRenderer(new TableActionCellRender());
-        teacherTable.getColumnModel().getColumn(4).setCellEditor(new TableActionCellEditor(ev));
+        teacherTable.getColumnModel().getColumn(7).setCellRenderer(new TableActionCellRender());
+        teacherTable.getColumnModel().getColumn(7).setCellEditor(new TableActionCellEditor(ev));
 
         JScrollPane scroll = new JScrollPane(teacherTable);
         scroll.setBorder(BorderFactory.createEmptyBorder());
         scroll.getViewport().setBackground(CARD_BG);
 
-        card.add(buildCardHeader("All Teachers"), BorderLayout.NORTH);
         card.add(scroll, BorderLayout.CENTER);
         wrapper.add(card);
         return wrapper;
     }
 
+    private JPanel createFilterBar() {
+        JPanel filterPanel = new JPanel(new GridBagLayout());
+        filterPanel.setBackground(CARD_BG);
+        filterPanel.setBorder(new EmptyBorder(15, 20, 15, 20));
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.anchor = GridBagConstraints.WEST;
+
+        TeacherFilterDAO filterDao = new TeacherFilterDAO();
+
+        // Specialization filter
+        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.1;
+        JLabel specLabel = new JLabel("Specialization:");
+        specLabel.setFont(new Font("SansSerif", Font.BOLD, 11));
+        specLabel.setForeground(TEXT_SEC);
+        filterPanel.add(specLabel, gbc);
+
+        gbc.gridx = 1; gbc.weightx = 0.2;
+        specializationCombo = new JComboBox<>();
+        specializationCombo.addItem("All");
+        for (String spec : filterDao.getAllSpecializations()) {
+            specializationCombo.addItem(spec);
+        }
+        filterPanel.add(specializationCombo, gbc);
+
+        // Experience filter
+        gbc.gridx = 2; gbc.weightx = 0.1;
+        JLabel expLabel = new JLabel("Experience:");
+        expLabel.setFont(new Font("SansSerif", Font.BOLD, 11));
+        expLabel.setForeground(TEXT_SEC);
+        filterPanel.add(expLabel, gbc);
+
+        gbc.gridx = 3; gbc.weightx = 0.2;
+        experienceCombo = new JComboBox<>(new String[]{"All", "0-2 years", "3-5 years", "5+ years"});
+        filterPanel.add(experienceCombo, gbc);
+
+        // City filter
+        gbc.gridx = 4; gbc.weightx = 0.1;
+        JLabel cityLabel = new JLabel("City:");
+        cityLabel.setFont(new Font("SansSerif", Font.BOLD, 11));
+        cityLabel.setForeground(TEXT_SEC);
+        filterPanel.add(cityLabel, gbc);
+
+        gbc.gridx = 5; gbc.weightx = 0.2;
+        cityCombo = new JComboBox<>();
+        cityCombo.addItem("All");
+        for (String city : filterDao.getAllCities()) {
+            cityCombo.addItem(city);
+        }
+        filterPanel.add(cityCombo, gbc);
+
+        // Second row
+        gbc.gridy = 1;
+
+        // Salary filter
+        gbc.gridx = 0; gbc.weightx = 0.1;
+        JLabel salaryLabel = new JLabel("Salary:");
+        salaryLabel.setFont(new Font("SansSerif", Font.BOLD, 11));
+        salaryLabel.setForeground(TEXT_SEC);
+        filterPanel.add(salaryLabel, gbc);
+
+        gbc.gridx = 1; gbc.weightx = 0.2;
+        salaryCombo = new JComboBox<>(new String[]{"All", "<20000", "20000-40000", "40000+"});
+        filterPanel.add(salaryCombo, gbc);
+
+        // Search field
+        gbc.gridx = 2; gbc.weightx = 0.1;
+        JLabel searchLabel = new JLabel("Search:");
+        searchLabel.setFont(new Font("SansSerif", Font.BOLD, 11));
+        searchLabel.setForeground(TEXT_SEC);
+        filterPanel.add(searchLabel, gbc);
+
+        gbc.gridx = 3; gbc.gridwidth = 2; gbc.weightx = 0.4;
+        searchField = new JTextField();
+        searchField.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(200, 210, 225), 1, true),
+            new EmptyBorder(4, 8, 4, 8)
+        ));
+        filterPanel.add(searchField, gbc);
+
+        // Buttons
+        gbc.gridx = 5; gbc.gridwidth = 1; gbc.weightx = 0.2;
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+        btnPanel.setOpaque(false);
+        
+        JButton applyBtn = makeAccentButton("Apply", e -> applyFilters());
+        applyBtn.setPreferredSize(new Dimension(80, 28));
+        
+        JButton clearBtn = makeSecondaryButton("Clear", e -> clearFilters());
+        clearBtn.setPreferredSize(new Dimension(80, 28));
+        
+        btnPanel.add(applyBtn);
+        btnPanel.add(clearBtn);
+        filterPanel.add(btnPanel, gbc);
+
+        return filterPanel;
+    }
+
+    private void applyFilters() {
+        model.setRowCount(0);
+        TeacherFilterDAO filterDao = new TeacherFilterDAO();
+
+        String specialization = (String) specializationCombo.getSelectedItem();
+        String experience = (String) experienceCombo.getSelectedItem();
+        String city = (String) cityCombo.getSelectedItem();
+        String salary = (String) salaryCombo.getSelectedItem();
+        String search = searchField.getText().trim();
+
+        // Convert display text to filter values
+        String expRange = null;
+        if ("0-2 years".equals(experience)) expRange = "0-2";
+        else if ("3-5 years".equals(experience)) expRange = "3-5";
+        else if ("5+ years".equals(experience)) expRange = "5+";
+
+        String salRange = null;
+        if ("<20000".equals(salary)) salRange = "<20000";
+        else if ("20000-40000".equals(salary)) salRange = "20000-40000";
+        else if ("40000+".equals(salary)) salRange = "40000+";
+
+        currentTeachers = filterDao.filterTeachers(
+            "All".equalsIgnoreCase(specialization) ? null : specialization,
+            expRange,
+            "All".equalsIgnoreCase(city) ? null : city,
+            salRange,
+            search.isEmpty() ? null : search,
+            null
+        );
+
+        populateTeacherTable();
+    }
+
+    private void clearFilters() {
+        specializationCombo.setSelectedIndex(0);
+        experienceCombo.setSelectedIndex(0);
+        cityCombo.setSelectedIndex(0);
+        salaryCombo.setSelectedIndex(0);
+        searchField.setText("");
+        refreshTable();
+    }
+
+    private void populateTeacherTable() {
+        SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+        for (Teacher t : currentTeachers) {
+            java.util.Date joinDateRaw = t.getJoinDate();
+            String city    = t.getCity()   != null ? t.getCity()                  : "--";
+            String joinStr = joinDateRaw   != null ? sdf.format(joinDateRaw)      : "--";
+            String name    = t.getName()   != null ? t.getName()
+                                                   : "Unspecified (#" + t.getUserId() + ")";
+            String spec    = t.getSpecialization() != null ? t.getSpecialization() : "--";
+            
+            // Fix experience display: handle Integer and null
+            String exp = "—";
+            if (t.getExperienceYears() != null) {
+                exp = t.getExperienceYears() + (t.getExperienceYears() == 1 ? " year" : " years");
+            }
+            
+            String salary  = t.getSalaryAmount() > 0 ? "₹" + ((long)t.getSalaryAmount()) : "—";
+            String degree  = t.getHighestDegree() != null ? t.getHighestDegree() : "—";
+            
+            model.addRow(new Object[]{name, spec, exp, salary, degree, city, joinStr, ""});
+        }
+    }
+
     private void refreshTable() {
         model.setRowCount(0);
         currentTeachers = new TeacherDAO().getAllTeachers();
-        for (Teacher t : currentTeachers) {
-            java.util.Date joinDateRaw = t.getJoinDate();
-            String city    = t.getCity()   != null ? t.getCity()                  : "—";
-            String joinStr = joinDateRaw   != null ? DATE_FMT.format(joinDateRaw) : "—";
-            String name    = t.getName()   != null ? t.getName()
-                                                   : "Unspecified (#" + t.getUserId() + ")";
-            model.addRow(new Object[]{name, t.getSpecialization(), city, joinStr, ""});
-        }
+        populateTeacherTable();
     }
 
     private void openTeacherModal(Teacher editTarget) {
@@ -163,7 +334,7 @@ public class TeacherManagementFrame extends JPanel {
         String titleStr = isEditMode ? "Edit Teacher — " + editTarget.getName() : "Add New Teacher";
 
         JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), titleStr, true);
-        dialog.setSize(660, 480);
+        dialog.setSize(720, 620);
         dialog.setLocationRelativeTo(this);
         dialog.getContentPane().setBackground(CARD_BG);
         dialog.setLayout(new BorderLayout());
@@ -182,13 +353,22 @@ public class TeacherManagementFrame extends JPanel {
         
         DateChooser joinChooser = new DateChooser();
         JTextField  cityField   = styledField();
+        
+        // ── NEW FIELDS ──
+        JSpinner experienceSpinner = new JSpinner(new SpinnerNumberModel(0, 0, 50, 1));
+        JTextField salaryField = styledField(); applyDecimalFilter(salaryField);
+        JTextField degreeField = styledField();
+        JComboBox<String> statusCombo = new JComboBox<>(new String[]{"ACTIVE", "INACTIVE"});
 
         JLabel nameErr  = errLabel(); JLabel emailErr = errLabel();
         JLabel phoneErr = errLabel();
         JLabel passErr  = errLabel(); JLabel cPassErr = errLabel();
-        JLabel cityErr  = errLabel();
+        JLabel cityErr  = errLabel(); JLabel salaryErr = errLabel();
 
-        styleField(passField); styleField(cPassField);
+        styleField(passField); 
+        styleField(cPassField);
+        styleField(experienceSpinner);
+        styleField(statusCombo);
 
         if (isEditMode) {
             nameField.setText(editTarget.getName() != null ? editTarget.getName() : "");
@@ -197,6 +377,13 @@ public class TeacherManagementFrame extends JPanel {
             specField.setText(editTarget.getSpecialization() != null ? editTarget.getSpecialization() : "");
             cityField.setText(editTarget.getCity() != null ? editTarget.getCity() : "");
             if (editTarget.getJoinDate() != null) joinChooser.setDate(editTarget.getJoinDate());
+            
+            // ── NEW FIELDS ──
+            experienceSpinner.setValue(editTarget.getExperienceYears() != null ? editTarget.getExperienceYears() : 0);
+            salaryField.setText(editTarget.getSalaryAmount() > 0 ? String.valueOf((long)editTarget.getSalaryAmount()) : "");
+            degreeField.setText(editTarget.getHighestDegree() != null ? editTarget.getHighestDegree() : "");
+            statusCombo.setSelectedItem(editTarget.getStatus() != null ? editTarget.getStatus() : "ACTIVE");
+            
             passField.setText("••••••");
             cPassField.setText("••••••");
         }
@@ -213,6 +400,12 @@ public class TeacherManagementFrame extends JPanel {
             : formRowWithErr("Confirm Password",      cPassField, cPassErr));
         form.add(formRow("Join Date",                  joinChooser));
         form.add(formRowWithErr("City",               cityField, cityErr));
+        
+        // ── NEW FORM ROWS ──
+        form.add(formRow("Experience (Years)",         experienceSpinner));
+        form.add(formRowWithErr("Salary (₹)",         salaryField, salaryErr));
+        form.add(formRow("Highest Degree",             degreeField));
+        form.add(formRow("Status",                     statusCombo));
 
         JScrollPane formScroll = new JScrollPane(form);
         formScroll.setBorder(BorderFactory.createEmptyBorder());
@@ -225,16 +418,28 @@ public class TeacherManagementFrame extends JPanel {
         String btnLabel = isEditMode ? "✓ Update Teacher" : "✓ Save Teacher";
         btnRow.add(makeAccentButton(btnLabel, e -> {
             if (!validateTeacherForm(nameField, emailField, phoneField, passField, cPassField,
-                    cityField, nameErr, emailErr, phoneErr, passErr, cPassErr, cityErr, isEditMode))
+                    cityField, salaryField, nameErr, emailErr, phoneErr, passErr, cPassErr, cityErr, salaryErr, isEditMode))
                 return;
             try {
                 String uId = isEditMode ? editTarget.getUserId() : new CounterDAO().getNextTeacherId();
                 Teacher t = new Teacher();
-                t.setUserId(uId); t.setName(nameField.getText().trim());
-                t.setEmail(emailField.getText().trim()); t.setPhone(phoneField.getText().trim());
-                t.setRole("TEACHER"); t.setSpecialization(specField.getText().trim());
+                t.setUserId(uId); 
+                t.setName(nameField.getText().trim());
+                t.setEmail(emailField.getText().trim()); 
+                t.setPhone(phoneField.getText().trim());
+                t.setRole("TEACHER"); 
+                t.setSpecialization(specField.getText().trim());
                 t.setJoinDate(joinChooser.getDate());
-                t.setCity(cityField.getText().trim()); t.setAdminId("A001");
+                t.setCity(cityField.getText().trim()); 
+                t.setAdminId("A001");
+                
+                // ── NEW FIELDS ──
+                t.setExperienceYears((Integer) experienceSpinner.getValue());
+                if (!salaryField.getText().trim().isEmpty()) {
+                    t.setSalaryAmount(Double.parseDouble(salaryField.getText().trim()));
+                }
+                t.setHighestDegree(degreeField.getText().trim());
+                t.setStatus((String) statusCombo.getSelectedItem());
 
                 String pw = new String(passField.getPassword());
                 t.setPassword((isEditMode && (pw.equals("••••••") || pw.isEmpty())) ? editTarget.getPassword() : pw);
@@ -266,8 +471,9 @@ public class TeacherManagementFrame extends JPanel {
     private boolean validateTeacherForm(
             JTextField nameField, JTextField emailField, JTextField phoneField,
             JPasswordField passField, JPasswordField cPassField,
-            JTextField cityField, JLabel nameErr, JLabel emailErr, JLabel phoneErr, 
-            JLabel passErr, JLabel cPassErr, JLabel cityErr, boolean isEditMode) {
+            JTextField cityField, JTextField salaryField,
+            JLabel nameErr, JLabel emailErr, JLabel phoneErr, 
+            JLabel passErr, JLabel cPassErr, JLabel cityErr, JLabel salaryErr, boolean isEditMode) {
         boolean ok = true;
         if (!nameField.getText().trim().matches("^[A-Za-z ]{3,}$")) {
             nameErr.setText("Only letters, min 3 chars"); ok = false;
@@ -289,6 +495,15 @@ public class TeacherManagementFrame extends JPanel {
         if (cityField.getText().trim().isEmpty()) {
             cityErr.setText("City is required"); ok = false;
         } else cityErr.setText("");
+        // ── Validate salary (optional but must be numeric if provided) ──
+        if (!salaryField.getText().trim().isEmpty()) {
+            try {
+                Double.parseDouble(salaryField.getText().trim());
+                salaryErr.setText("");
+            } catch (NumberFormatException e) {
+                salaryErr.setText("Must be a number"); ok = false;
+            }
+        } else salaryErr.setText("");
         return ok;
     }
 
@@ -306,6 +521,17 @@ public class TeacherManagementFrame extends JPanel {
             @Override public void replace(FilterBypass fb, int o, int l, String s, AttributeSet a) throws BadLocationException {
                 String res = s.replaceAll("[^0-9]", "");
                 if (fb.getDocument().getLength() - l + res.length() <= max) super.replace(fb, o, l, res, a);
+            }
+        });
+    }
+
+    private void applyDecimalFilter(JTextField f) {
+        ((AbstractDocument) f.getDocument()).setDocumentFilter(new DocumentFilter() {
+            @Override public void replace(FilterBypass fb, int o, int l, String s, AttributeSet a) throws BadLocationException {
+                String cur = fb.getDocument().getText(0, fb.getDocument().getLength());
+                String res = s.replaceAll("[^0-9.]", "");
+                if (res.contains(".") && cur.contains(".")) res = res.replace(".", "");
+                super.replace(fb, o, l, res, a);
             }
         });
     }
@@ -374,21 +600,38 @@ public class TeacherManagementFrame extends JPanel {
     private JButton makeAccentButton(String text, java.awt.event.ActionListener al) {
         JButton btn = new JButton(text) {
             @Override protected void paintComponent(Graphics g) {
-                Graphics2D g2=(Graphics2D)g.create(); g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(getModel().isRollover()?ACCENT_DARK:ACCENT); g2.fillRoundRect(0,0,getWidth(),getHeight(),20,20);
-                super.paintComponent(g2); g2.dispose();
+                Graphics2D g2=(Graphics2D)g.create(); 
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(getModel().isRollover()?ACCENT_DARK:ACCENT); 
+                g2.fillRoundRect(0,0,getWidth(),getHeight(),10,10);
+                super.paintComponent(g2); 
+                g2.dispose();
             }
         };
-        btn.setContentAreaFilled(false); btn.setOpaque(false); btn.setBorderPainted(false);
-        btn.setForeground(Color.WHITE); btn.setFont(new Font("SansSerif",Font.BOLD,13));
-        btn.setPreferredSize(new Dimension(200,38)); btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        btn.setFocusPainted(false); if (al!=null) btn.addActionListener(al); return btn;
+        btn.setContentAreaFilled(false); 
+        btn.setOpaque(false); 
+        btn.setBorderPainted(false);
+        btn.setForeground(Color.WHITE); 
+        btn.setFont(new Font("SansSerif",Font.BOLD,13));
+        btn.setPreferredSize(new Dimension(200,38)); 
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btn.setFocusPainted(false); 
+        if (al!=null) btn.addActionListener(al); 
+        return btn;
     }
 
     private JButton makeSecondaryButton(String text, java.awt.event.ActionListener al) {
-        JButton btn = new JButton(text); btn.setBackground(CARD_BG); btn.setForeground(ACCENT);
-        btn.setFont(new Font("SansSerif",Font.BOLD,13)); btn.setFocusPainted(false);
-        btn.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(ACCENT,1,true),new EmptyBorder(6,16,6,16)));
-        btn.setCursor(new Cursor(Cursor.HAND_CURSOR)); if (al!=null) btn.addActionListener(al); return btn;
+        JButton btn = new JButton(text); 
+        btn.setBackground(CARD_BG); 
+        btn.setForeground(ACCENT);
+        btn.setFont(new Font("SansSerif",Font.BOLD,13)); 
+        btn.setFocusPainted(false);
+        btn.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(ACCENT,1,true),
+            new EmptyBorder(6,16,6,16)
+        ));
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR)); 
+        if (al!=null) btn.addActionListener(al); 
+        return btn;
     }
 }

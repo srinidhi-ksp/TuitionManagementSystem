@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.bson.Document;
+import org.bson.conversions.Bson;
 
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
@@ -18,11 +19,13 @@ import model.Student;
 public class StudentDAO {
 
     private MongoCollection<Document> studentCollection;
+    private MongoCollection<Document> enrollmentCollection;
 
     public StudentDAO() {
         MongoDatabase database = DBConnection.getDatabase();
         if (database != null) {
             studentCollection = database.getCollection("students");
+            enrollmentCollection = database.getCollection("enrollments");
         }
     }
 
@@ -41,14 +44,12 @@ public class StudentDAO {
     public Student getStudentById(String userId) {
         if (studentCollection == null) return null;
         try {
-            // Try both _id and user_id fields to find the student
             Document doc = studentCollection.find(
                 Filters.or(
                     Filters.eq("_id", userId),
                     Filters.eq("user_id", userId)
                 )
             ).first();
-            
             return DocumentMapper.documentToStudent(doc);
         } catch (Exception e) {
             e.printStackTrace();
@@ -65,11 +66,11 @@ public class StudentDAO {
             System.err.println("[StudentDAO] ❌ getStudentByUserId: Collection or ID is null");
             return null;
         }
-        
+
         try {
             String searchId = userIdValue.trim();
             System.out.println("[StudentDAO] 🔍 Attempting to map User ID: '" + searchId + "'");
-            
+
             // STRATEGY 1: Try exact match on 'user_id' field (if documents have this field)
             Document doc = studentCollection.find(Filters.eq("user_id", searchId)).first();
             if (doc != null) {
@@ -81,7 +82,7 @@ public class StudentDAO {
                 return s;
             }
             System.out.println("[StudentDAO]   ⚠️  No match on user_id field");
-            
+
             // STRATEGY 2: Try match on email (most reliable cross-reference)
             System.out.println("[StudentDAO]   🔄 Trying email-based lookup...");
             UserDAO userDAO = new UserDAO();
@@ -117,7 +118,7 @@ public class StudentDAO {
 
             System.err.println("[StudentDAO] ❌ FAILED to map User ID: " + searchId + " (all strategies exhausted)");
             return null;
-            
+
         } catch (Exception e) {
             System.err.println("[StudentDAO] ❌ Error in getStudentByUserId: " + e.getMessage());
             e.printStackTrace();
@@ -177,7 +178,7 @@ public class StudentDAO {
     public List<Student> getAllStudents() {
         List<Student> studentList = new ArrayList<>();
         if (studentCollection == null) return studentList;
-        
+
         try (MongoCursor<Document> cursor = studentCollection.find().iterator()) {
             while (cursor.hasNext()) {
                 Document doc = cursor.next();
@@ -206,5 +207,135 @@ public class StudentDAO {
             e.printStackTrace();
         }
         return studentList;
+    }
+
+    // ══════════════════════════════════════════════════
+    // NEW: Active/Inactive detection via enrollments
+    // ══════════════════════════════════════════════════
+
+    /**
+     * Returns distinct student IDs that have at least one ACTIVE enrollment.
+     * Checks both 'student_user_id' and 'student_id' field names.
+     */
+    public List<String> getActiveStudentIds() {
+        List<String> ids = new ArrayList<>();
+        if (enrollmentCollection == null) return ids;
+        try {
+            // Check student_user_id field
+            enrollmentCollection
+                .distinct("student_user_id", Filters.eq("status", "ACTIVE"), String.class)
+                .into(ids);
+            // Also check student_id field for alternate schema
+            List<String> alt = new ArrayList<>();
+            enrollmentCollection
+                .distinct("student_id", Filters.eq("status", "ACTIVE"), String.class)
+                .into(alt);
+            for (String id : alt) {
+                if (id != null && !ids.contains(id)) ids.add(id);
+            }
+        } catch (Exception e) {
+            System.err.println("[StudentDAO] Error fetching active student IDs: " + e.getMessage());
+        }
+        return ids;
+    }
+
+    /**
+     * Returns count of active students (have at least one ACTIVE enrollment).
+     */
+    public int countActiveStudents() {
+        return getActiveStudentIds().size();
+    }
+
+    /**
+     * Returns count of inactive students (no ACTIVE enrollments).
+     */
+    public int countInactiveStudents() {
+        int total = (int) (studentCollection != null ? studentCollection.countDocuments() : 0);
+        return total - countActiveStudents();
+    }
+
+    /**
+     * Fetches filtered students based on tab (ALL/ACTIVE/INACTIVE), dropdown filters,
+     * and an optional name/ID search string.
+     *
+     * @param tab       "ALL", "ACTIVE", or "INACTIVE"
+     * @param standard  null or "All" to skip, otherwise exact match
+     * @param board     null or "All" to skip, otherwise exact match
+     * @param city      null or "All" to skip, otherwise exact match
+     * @param search    null or "" to skip; otherwise regex on full_name or _id
+     */
+    public List<Student> getStudentsFiltered(String tab, String standard, String board,
+                                              String city, String search) {
+        List<Student> result = new ArrayList<>();
+        if (studentCollection == null) return result;
+
+        try {
+            List<Bson> conditions = new ArrayList<>();
+
+            // ── Active / Inactive tab filter ──
+            if ("ACTIVE".equalsIgnoreCase(tab)) {
+                List<String> activeIds = getActiveStudentIds();
+                if (activeIds.isEmpty()) return result; // no active students
+                conditions.add(Filters.in("_id", activeIds));
+            } else if ("INACTIVE".equalsIgnoreCase(tab)) {
+                List<String> activeIds = getActiveStudentIds();
+                conditions.add(Filters.nin("_id", activeIds));
+            }
+
+            // ── Standard filter ──
+            if (standard != null && !standard.isEmpty() && !"All".equals(standard)) {
+                conditions.add(Filters.or(
+                    Filters.eq("standard", standard),
+                    Filters.eq("current_std", standard)
+                ));
+            }
+
+            // ── Board filter ──
+            if (board != null && !board.isEmpty() && !"All".equals(board)) {
+                conditions.add(Filters.eq("board", board));
+            }
+
+            // ── City filter ──
+            if (city != null && !city.isEmpty() && !"All".equals(city)) {
+                conditions.add(Filters.eq("city", city));
+            }
+
+            // ── Search filter (name or ID) ──
+            if (search != null && !search.trim().isEmpty()) {
+                String regex = search.trim();
+                conditions.add(Filters.or(
+                    Filters.regex("full_name", regex, "i"),
+                    Filters.regex("_id", regex, "i")
+                ));
+            }
+
+            Bson query = conditions.isEmpty() ? new Document() : Filters.and(conditions);
+
+            try (MongoCursor<Document> cursor = studentCollection.find(query).iterator()) {
+                while (cursor.hasNext()) {
+                    Student s = DocumentMapper.documentToStudent(cursor.next());
+                    if (s != null) result.add(s);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[StudentDAO] Error in getStudentsFiltered: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return result;
+    }
+
+    /**
+     * Returns distinct city values from the students collection for populating dropdowns.
+     */
+    public List<String> getDistinctCities() {
+        List<String> cities = new ArrayList<>();
+        if (studentCollection == null) return cities;
+        try {
+            studentCollection.distinct("city", String.class).into(cities);
+            cities.removeIf(c -> c == null || c.trim().isEmpty());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return cities;
     }
 }

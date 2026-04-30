@@ -4,99 +4,105 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.bson.Document;
+
 import com.mongodb.client.MongoCollection;
-import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
 
-import model.Parent;
 import db.DBConnection;
 import db.DocumentMapper;
+import model.Parent;
 
+/**
+ * Parent DAO - Handles all parent-related database operations
+ */
 public class ParentDAO {
 
     private MongoCollection<Document> parentCollection;
 
     public ParentDAO() {
-        MongoDatabase database = DBConnection.getDatabase();
-        if (database != null) {
-            parentCollection = database.getCollection("parents");
-        }
-    }
-
-    public boolean addParent(Parent parent) {
-        if (parentCollection == null) return false;
         try {
-            Document doc = DocumentMapper.parentToDocument(parent);
-            parentCollection.insertOne(doc);
-            return true;
+            MongoDatabase database = DBConnection.getDatabase();
+            if (database != null) {
+                parentCollection = database.getCollection("parents");
+                System.out.println("[ParentDAO] ✅ Connected to 'parents' collection");
+            } else {
+                System.err.println("[ParentDAO] ❌ Database connection failed!");
+            }
         } catch (Exception e) {
+            System.err.println("[ParentDAO] Error initializing: " + e.getMessage());
             e.printStackTrace();
         }
-        return false;
     }
 
-    public Parent getParentById(String userId) {
+    /**
+     * Fetch parent by user_id
+     */
+    public Parent getByUserId(String userId) {
         if (parentCollection == null) return null;
         try {
             Document doc = parentCollection.find(Filters.eq("user_id", userId)).first();
-            if (doc != null) {
-                Parent p = DocumentMapper.documentToParent(doc);
-                // Also get the associated user details to set name correctly if missing
-                MongoDatabase database = DBConnection.getDatabase();
-                if (database != null) {
-                    MongoCollection<Document> usersColl = database.getCollection("users");
-                    Document userDoc = usersColl.find(Filters.eq("_id", userId)).first();
-                    if (userDoc != null) {
-                        String fName = userDoc.getString("first_name");
-                        String lName = userDoc.getString("last_name");
-                        p.setName(((fName != null ? fName : "") + " " + (lName != null ? lName : "")).trim());
-                    }
-                }
-                return p;
+            if (doc == null) {
+                // Fallback to searching by _id
+                doc = parentCollection.find(Filters.eq("_id", userId)).first();
             }
+            return DocumentMapper.documentToParent(doc);
         } catch (Exception e) {
-            e.printStackTrace();
+            System.err.println("[ParentDAO] Error fetching parent by user_id: " + e.getMessage());
+            return null;
         }
-        return null;
     }
 
-    public boolean deleteParent(String userId) {
+    /**
+     * Get parent by email
+     */
+    public Parent getByEmail(String email) {
+        if (parentCollection == null) return null;
+        try {
+            Document doc = parentCollection.find(Filters.eq("email", email)).first();
+            return DocumentMapper.documentToParent(doc);
+        } catch (Exception e) {
+            System.err.println("[ParentDAO] Error fetching parent by email: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Link a student to a parent
+     */
+    public boolean linkStudent(String parentId, String studentId) {
         if (parentCollection == null) return false;
         try {
-            long deletedCount = parentCollection.deleteOne(Filters.eq("user_id", userId)).getDeletedCount();
-            return deletedCount > 0;
+            Parent p = getByUserId(parentId);
+            if (p != null) {
+                List<String> studentIds = p.getLinkedStudentIds();
+                if (studentIds == null) studentIds = new ArrayList<>();
+                if (!studentIds.contains(studentId)) {
+                    studentIds.add(studentId);
+                    parentCollection.updateOne(
+                        Filters.eq("user_id", parentId),
+                        new Document("$set", new Document("linked_student_ids", studentIds))
+                    );
+                    return true;
+                }
+            }
         } catch (Exception e) {
-            e.printStackTrace();
+            System.err.println("[ParentDAO] Error linking student: " + e.getMessage());
         }
         return false;
     }
-
-    public List<Parent> getAllParents() {
-        List<Parent> list = new ArrayList<>();
-        if (parentCollection == null) return list;
-
-        try (MongoCursor<Document> cursor = parentCollection.find().iterator()) {
-            while (cursor.hasNext()) {
-                Document doc = cursor.next();
-                Parent p = DocumentMapper.documentToParent(doc);
-                if (p != null) {
-                    MongoDatabase database = DBConnection.getDatabase();
-                    if (database != null) {
-                        MongoCollection<Document> usersColl = database.getCollection("users");
-                        Document userDoc = usersColl.find(Filters.eq("_id", p.getUserId())).first();
-                        if (userDoc != null) {
-                            String fName = userDoc.getString("first_name");
-                            String lName = userDoc.getString("last_name");
-                            p.setName(((fName != null ? fName : "") + " " + (lName != null ? lName : "")).trim());
-                        }
-                    }
-                    list.add(p);
-                }
-            }
+    /**
+     * Add a new parent record
+     */
+    public boolean addParent(Parent p) {
+        if (parentCollection == null) return false;
+        try {
+            Document doc = DocumentMapper.parentToDocument(p);
+            parentCollection.insertOne(doc);
+            return true;
         } catch (Exception e) {
-            e.printStackTrace();
+            System.err.println("[ParentDAO] Error adding parent: " + e.getMessage());
+            return false;
         }
-        return list;
     }
 }

@@ -174,4 +174,68 @@ public class EnrollmentDAO {
         }
         return false;
     }
+
+    public java.util.Map<String, Long> getEnrollmentStats() {
+        java.util.Map<String, Long> stats = new java.util.HashMap<>();
+        if (enrollmentCollection == null) {
+            stats.put("paid", 0L);
+            stats.put("unpaid", 0L);
+            return stats;
+        }
+
+        try {
+            long paidCount = 0;
+            PaymentDAO paymentDao = new PaymentDAO();
+            BatchDAO batchDao = new BatchDAO();
+            
+            try (MongoCursor<Document> cursor = enrollmentCollection.find(Filters.eq("status", "ACTIVE")).iterator()) {
+                while (cursor.hasNext()) {
+                    Document doc = cursor.next();
+                    String studentId = doc.getString("student_user_id");
+                    if (studentId == null) studentId = doc.getString("student_id");
+                    
+                    Integer batchId = doc.getInteger("batch_id");
+                    if (batchId != null) {
+                        model.Batch b = batchDao.getBatchById(batchId);
+                        if (b != null && paymentDao.isSubjectPaid(studentId, String.valueOf(b.getSubjectId()))) {
+                            paidCount++;
+                        }
+                    }
+                }
+            }
+            
+            long totalActive = enrollmentCollection.countDocuments(Filters.eq("status", "ACTIVE"));
+            stats.put("paid", paidCount);
+            stats.put("unpaid", Math.max(0, totalActive - paidCount));
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+            stats.put("paid", 0L);
+            stats.put("unpaid", 0L);
+        }
+        return stats;
+    }
+
+    /**
+     * Fetch all enrollments filtered by status (ACTIVE, COMPLETED, CANCELLED).
+     * Uses status field directly – returns all records matching that status.
+     */
+    public List<Enrollment> getEnrollmentsByStatus(String status) {
+        List<Enrollment> results = new ArrayList<>();
+        if (enrollmentCollection == null || status == null) return results;
+
+        try (MongoCursor<Document> cursor = enrollmentCollection
+                .find(Filters.regex("status", "^" + status + "$", "i"))
+                .iterator()) {
+            while (cursor.hasNext()) {
+                Document doc = cursor.next();
+                Enrollment e = DocumentMapper.documentToEnrollment(doc);
+                if (e != null) results.add(e);
+            }
+        } catch (Exception e) {
+            System.err.println("[EnrollmentDAO] getEnrollmentsByStatus error: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return results;
+    }
 }

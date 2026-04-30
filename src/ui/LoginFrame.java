@@ -341,6 +341,16 @@ public class LoginFrame extends JFrame {
                         // Fallback to email if teacher profile not found
                         sessionUserName = user.getEmail();
                     }
+                } else if ("Parent".equalsIgnoreCase(role)) {
+                    model.Parent p = new dao.ParentDAO().getByUserId(user.getUserId());
+                    if (p != null) {
+                        sessionUserId = p.getUserId();
+                        if (p.getName() != null && !p.getName().trim().isEmpty()) {
+                            sessionUserName = p.getName();
+                        }
+                    } else {
+                        sessionUserName = user.getEmail();
+                    }
                 }
 
                 SessionManager.getInstance().setSession(sessionUserId, user.getRole(), sessionUserName, user.getEmail());

@@ -10,6 +10,7 @@ import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GridBagLayout;
 import java.awt.RenderingHints;
 
 import javax.swing.BorderFactory;
@@ -26,23 +27,19 @@ import javax.swing.border.EmptyBorder;
 
 import model.User;
 import ui.LoginFrame;
-import ui.student.AttendancePanel;
-import ui.student.FeesPanel;
-import ui.student.MyBatchesPanel;
-import ui.student.MySubjectsPanel;
-import ui.student.OverviewPanel;
-import ui.student.ProfilePanel;
-import ui.student.SyllabusProgressPanel;
 import util.SessionManager;
+import util.ThemeManager;
 
+/**
+ * Parent Portal Dashboard - Professional Card-based UI
+ */
 public class ParentDashboard extends JFrame {
 
-    private static final Color NAV_BG      = new Color(10, 27, 63);
-    private static final Color ACCENT      = new Color(74, 144, 226);
-    private static final Color PAGE_BG     = new Color(244, 247, 249);
-    private static final Color CARD_BG     = Color.WHITE;
-    private static final Color TEXT_PRI    = new Color(26, 35, 64);
-    private static final Color TEXT_SEC    = new Color(107, 122, 153);
+    private static final Color NAV_BG      = new Color(2, 6, 23); // Consistent with Admin
+    private static final Color ACCENT      = new Color(59, 130, 246);
+    private static final Color PAGE_BG     = new Color(248, 250, 252);
+    private static final Color TEXT_PRI    = new Color(249, 250, 251);
+    private static final Color TEXT_SEC    = new Color(156, 163, 175);
 
     private CardLayout cardLayout;
     private JPanel mainContentPanel;
@@ -50,24 +47,28 @@ public class ParentDashboard extends JFrame {
     private JButton activeBtn = null;
 
     public ParentDashboard(User user) {
+        // Fix for JPopupMenu overlapping in some environments
+        JPopupMenu.setDefaultLightWeightPopupEnabled(false);
+
         setTitle("MRK Tuition – Parent Portal");
-        setSize(1300, 800);
+        setSize(1400, 850);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
-        getContentPane().setBackground(PAGE_BG);
 
         cardLayout = new CardLayout();
         mainContentPanel = new JPanel(cardLayout);
         mainContentPanel.setBackground(PAGE_BG);
 
-        // Register student panels (reused for parent as read-only)
-        mainContentPanel.add(new OverviewPanel(), "Overview");
-        mainContentPanel.add(new MySubjectsPanel(), "Student Subjects");
-        mainContentPanel.add(new SyllabusProgressPanel(), "Syllabus Progress");
-        mainContentPanel.add(new AttendancePanel(), "Attendance");
-        mainContentPanel.add(new FeesPanel(), "Fees & Payments");
-        mainContentPanel.add(new ProfilePanel(), "My Profile");
+        // Register functional parent panels
+        mainContentPanel.add(new ParentOverviewPanel(), "Dashboard Overview");
+        mainContentPanel.add(new ParentMarksPanel(), "Marks & Performance");
+        mainContentPanel.add(new ParentFeesPanel(), "Fees & Payments");
+        mainContentPanel.add(new ParentAttendancePanel(), "Attendance");
+        mainContentPanel.add(new ParentProfilePanel(), "Profile");
+        
+        // Notifications can be part of Overview, but we keep the menu item
+        mainContentPanel.add(new ParentOverviewPanel(), "Notifications");
 
         add(createTopNavbar(), BorderLayout.NORTH);
         add(createSidebar(), BorderLayout.WEST);
@@ -77,33 +78,33 @@ public class ParentDashboard extends JFrame {
     private JPanel createTopNavbar() {
         JPanel topPanel = new JPanel(new BorderLayout());
         topPanel.setBackground(NAV_BG);
-        topPanel.setPreferredSize(new Dimension(0, 62));
+        topPanel.setPreferredSize(new Dimension(0, 68));
+        topPanel.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(31, 41, 55)));
 
-        JPanel logoPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 24, 12));
-        logoPanel.setBackground(NAV_BG);
-        JLabel logoText = new JLabel("MRK Tuition Parent Portal");
-        logoText.setFont(new Font("SansSerif", Font.BOLD, 18));
+        JPanel logoPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 28, 18));
+        logoPanel.setOpaque(false);
+        JLabel logoText = new JLabel("MRK TUITION PORTAL");
+        logoText.setFont(new Font("SansSerif", Font.BOLD, 20));
         logoText.setForeground(Color.WHITE);
         logoPanel.add(logoText);
 
-        JPanel userPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 20, 10));
-        userPanel.setBackground(NAV_BG);
+        JPanel userPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 24, 14));
+        userPanel.setOpaque(false);
 
         String userName = SessionManager.getInstance().getUserName();
         JButton profileBtn = new JButton("👤 " + (userName != null ? userName : "Parent") + " ▾");
         profileBtn.setFont(new Font("SansSerif", Font.BOLD, 13));
         profileBtn.setForeground(Color.WHITE);
-        profileBtn.setBackground(new Color(255, 255, 255, 25));
+        profileBtn.setBackground(new Color(255, 255, 255, 10));
         profileBtn.setFocusPainted(false);
         profileBtn.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(new Color(255, 255, 255, 60), 1, true),
-            new EmptyBorder(6, 16, 6, 16)
+            BorderFactory.createLineBorder(new Color(255, 255, 255, 40), 1, true),
+            new EmptyBorder(8, 18, 8, 18)
         ));
         profileBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
 
         JPopupMenu popup = new JPopupMenu();
         JMenuItem logoutItem = new JMenuItem("  Logout  ");
-        logoutItem.setForeground(new Color(220, 50, 50));
         logoutItem.addActionListener(e -> { dispose(); new LoginFrame().setVisible(true); });
         popup.add(logoutItem);
         profileBtn.addActionListener(e -> popup.show(profileBtn, 0, profileBtn.getHeight()));
@@ -117,23 +118,24 @@ public class ParentDashboard extends JFrame {
     private JPanel createSidebar() {
         sidebarPanel = new JPanel();
         sidebarPanel.setLayout(new BoxLayout(sidebarPanel, BoxLayout.Y_AXIS));
-        sidebarPanel.setPreferredSize(new Dimension(240, 0));
+        sidebarPanel.setPreferredSize(new Dimension(260, 0));
         sidebarPanel.setBackground(NAV_BG);
+        sidebarPanel.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, new Color(31, 41, 55)));
 
-        sidebarPanel.add(Box.createRigidArea(new Dimension(0, 20)));
+        sidebarPanel.add(Box.createRigidArea(new Dimension(0, 30)));
 
-        addSidebarItem("🏠", "Overview");
-        addSidebarItem("📚", "Student Subjects");
-        addSidebarItem("📊", "Syllabus Progress");
-        addSidebarItem("📝", "Attendance");
+        addSidebarItem("🏠", "Dashboard Overview");
+        addSidebarItem("📈", "Marks & Performance");
         addSidebarItem("💰", "Fees & Payments");
-        addSidebarItem("👤", "My Profile");
+        addSidebarItem("🗓️", "Attendance");
+        addSidebarItem("🔔", "Notifications");
+        addSidebarItem("👤", "Profile");
 
         sidebarPanel.add(Box.createGlue());
         
         JButton logoutBtn = createLogoutButton();
         sidebarPanel.add(logoutBtn);
-        sidebarPanel.add(Box.createRigidArea(new Dimension(0, 20)));
+        sidebarPanel.add(Box.createRigidArea(new Dimension(0, 30)));
 
         return sidebarPanel;
     }
@@ -145,7 +147,7 @@ public class ParentDashboard extends JFrame {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 if (this == activeBtn) {
-                    g2.setColor(new Color(255, 255, 255, 30)); // NAV_ACTIVE_BG equivalent
+                    g2.setColor(new Color(59, 130, 246, 40));
                     g2.fillRect(0, 0, getWidth(), getHeight());
                     g2.setColor(ACCENT);
                     g2.fillRect(0, 0, 4, getHeight());
@@ -159,20 +161,20 @@ public class ParentDashboard extends JFrame {
         };
         
         btn.setFont(new Font("SansSerif", Font.PLAIN, 14));
-        btn.setForeground(new Color(255, 255, 255, 180));
+        btn.setForeground(label.equals("Dashboard Overview") && activeBtn == null ? Color.WHITE : TEXT_SEC);
         btn.setAlignmentX(Component.LEFT_ALIGNMENT);
-        btn.setMaximumSize(new Dimension(240, 48));
-        btn.setPreferredSize(new Dimension(240, 48));
+        btn.setMaximumSize(new Dimension(260, 52));
+        btn.setPreferredSize(new Dimension(260, 52));
         btn.setOpaque(false);
         btn.setContentAreaFilled(false);
         btn.setBorderPainted(false);
         btn.setFocusPainted(false);
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         btn.setHorizontalAlignment(SwingConstants.LEFT);
-        btn.setBorder(new EmptyBorder(0, 24, 0, 0));
+        btn.setBorder(new EmptyBorder(0, 32, 0, 0));
 
         btn.addActionListener(e -> {
-            if (activeBtn != null) activeBtn.setForeground(new Color(255, 255, 255, 180));
+            if (activeBtn != null) activeBtn.setForeground(TEXT_SEC);
             activeBtn = btn;
             btn.setForeground(Color.WHITE);
             cardLayout.show(mainContentPanel, label);
@@ -180,7 +182,7 @@ public class ParentDashboard extends JFrame {
         });
 
         sidebarPanel.add(btn);
-        if (activeBtn == null && label.equals("Overview")) {
+        if (activeBtn == null && label.equals("Dashboard Overview")) {
             activeBtn = btn;
             btn.setForeground(Color.WHITE);
         }
@@ -189,21 +191,18 @@ public class ParentDashboard extends JFrame {
     private JButton createLogoutButton() {
         JButton btn = new JButton("🚪    Logout");
         btn.setFont(new Font("SansSerif", Font.BOLD, 14));
-        btn.setForeground(new Color(255, 100, 100));
+        btn.setForeground(new Color(239, 68, 68));
         btn.setAlignmentX(Component.LEFT_ALIGNMENT);
-        btn.setMaximumSize(new Dimension(240, 48));
-        btn.setPreferredSize(new Dimension(240, 48));
+        btn.setMaximumSize(new Dimension(260, 52));
         btn.setOpaque(false);
         btn.setContentAreaFilled(false);
         btn.setBorderPainted(false);
         btn.setFocusPainted(false);
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         btn.setHorizontalAlignment(SwingConstants.LEFT);
-        btn.setBorder(new EmptyBorder(0, 24, 0, 0));
-        btn.addActionListener(e -> {
-            dispose();
-            new LoginFrame().setVisible(true);
-        });
+        btn.setBorder(new EmptyBorder(0, 32, 0, 0));
+        btn.addActionListener(e -> { dispose(); new LoginFrame().setVisible(true); });
         return btn;
     }
+
 }

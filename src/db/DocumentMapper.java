@@ -174,7 +174,10 @@ public class DocumentMapper {
         t.setEmail(doc.getString("email"));
         t.setPhone(doc.getString("phone"));
         t.setSpecialization(doc.getString("specialization"));
-        t.setRole(doc.getString("status")); // Usually status ACTIVE, or role
+
+        // ── Status field ──
+        String status = doc.getString("status");
+        t.setStatus(status != null ? status : "ACTIVE");
 
         // ── City: read from multiple possible fields ──
         String city = doc.getString("city");
@@ -189,13 +192,29 @@ public class DocumentMapper {
         List<String> quals = doc.getList("qualifications", String.class);
         if (quals != null) t.setQualifications(quals);
 
-        // ── Salary nested doc ──
-        Document salDoc = (Document) doc.get("salary");
-        if (salDoc != null) {
+        // ── NEW: flat experience_years, highest_degree ──
+        Object expObj = doc.get("experience_years");
+        if (expObj instanceof Number) {
+            t.setExperienceYears(((Number) expObj).intValue());
+        } else {
+            t.setExperienceYears(null);
+        }
+
+        t.setHighestDegree(doc.getString("highest_degree"));
+
+        // ── Salary: prefer flat number field (from bulkWrite), fallback to nested doc ──
+        Object flatSalObj = doc.get("salary");
+        if (flatSalObj instanceof Number) {
+            // Flat salary field (e.g. salary: 50000)
+            t.setSalaryAmount(((Number) flatSalObj).doubleValue());
+        } else if (flatSalObj instanceof Document) {
+            // Legacy nested salary doc
+            Document salDoc = (Document) flatSalObj;
             Teacher.Salary salary = new Teacher.Salary();
             Object baseSalObj = salDoc.get("base_salary");
             if (baseSalObj instanceof Number) {
                 salary.setBaseSalary(((Number) baseSalObj).doubleValue());
+                t.setSalaryAmount(((Number) baseSalObj).doubleValue()); // mirror to flat
             }
             Object workingDaysObj = salDoc.get("working_days");
             if (workingDaysObj instanceof Number) {
@@ -214,22 +233,29 @@ public class DocumentMapper {
         doc.append("full_name",      teacher.getName());
         doc.append("specialization", teacher.getSpecialization());
         doc.append("phone",          teacher.getPhone() != null ? teacher.getPhone() : "9999999999");
-        doc.append("status",         "ACTIVE");
+        doc.append("status",         teacher.getStatus() != null ? teacher.getStatus() : "ACTIVE");
 
         // Persist city, street, join_date to DB
         if (teacher.getCity()     != null) doc.append("city",      teacher.getCity());
         if (teacher.getStreet()   != null) doc.append("street",    teacher.getStreet());
         if (teacher.getJoinDate() != null) doc.append("join_date", teacher.getJoinDate());
 
-        if (teacher.getQualifications() != null) {
-            doc.append("qualifications", teacher.getQualifications());
-        }
-
-        if (teacher.getSalary() != null) {
+        // ── NEW flat fields ──
+        doc.append("experience_years", teacher.getExperienceYears());
+        if (teacher.getHighestDegree() != null) doc.append("highest_degree", teacher.getHighestDegree());
+        // Store salary as flat number (compatible with bulkWrite schema)
+        if (teacher.getSalaryAmount() > 0) {
+            doc.append("salary", teacher.getSalaryAmount());
+        } else if (teacher.getSalary() != null) {
+            // Fallback: persist legacy nested salary
             Document salDoc = new Document();
             salDoc.append("base_salary",  teacher.getSalary().getBaseSalary());
             salDoc.append("working_days", teacher.getSalary().getWorkingDays());
             doc.append("salary", salDoc);
+        }
+
+        if (teacher.getQualifications() != null) {
+            doc.append("qualifications", teacher.getQualifications());
         }
 
         return doc;
@@ -710,6 +736,9 @@ public class DocumentMapper {
         p.setRelationType(doc.getString("relation_type"));
         p.setName(doc.getString("name"));
         
+        List<String> studentIds = doc.getList("linked_student_ids", String.class);
+        if (studentIds != null) p.setLinkedStudentIds(studentIds);
+        
         return p;
     }
 
@@ -722,6 +751,7 @@ public class DocumentMapper {
         doc.append("emergency_contact", p.getEmergencyContact());
         doc.append("relation_type", p.getRelationType());
         if (p.getName() != null) doc.append("name", p.getName());
+        if (p.getLinkedStudentIds() != null) doc.append("linked_student_ids", p.getLinkedStudentIds());
         return doc;
     }
 

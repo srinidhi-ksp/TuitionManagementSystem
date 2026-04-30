@@ -1,20 +1,54 @@
 package ui.admin;
 
-import javax.swing.*;
-import javax.swing.border.*;
-import javax.swing.table.DefaultTableCellRenderer;
-import javax.swing.table.DefaultTableModel;
-import javax.swing.text.*;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.CardLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.Frame;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.GridLayout;
+import java.awt.Insets;
+import java.awt.RenderingHints;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
-import dao.StudentDAO;
+
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JComponent;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPasswordField;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
+import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
+import javax.swing.border.EmptyBorder;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.text.AbstractDocument;
+import javax.swing.text.AttributeSet;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.DocumentFilter;
+
 import dao.CounterDAO;
-import dao.UserDAO;
 import dao.ParentDAO;
-import model.Student;
+import dao.StudentDAO;
+import dao.StudentFilterDAO;
+import dao.UserDAO;
 import model.Parent;
+import model.Student;
 import model.User;
 
 public class StudentManagementFrame extends JPanel {
@@ -32,6 +66,15 @@ public class StudentManagementFrame extends JPanel {
     private DefaultTableModel model;
     private List<Student> currentStudents;
     private static final SimpleDateFormat DATE_FMT = new SimpleDateFormat("dd-MM-yyyy");
+
+    // ── Filter components ──
+    private JComboBox<String> standardCombo, boardCombo, cityCombo, statusCombo;
+    private JTextField searchField;
+    private JLabel activeCountLabel, inactiveCountLabel, totalCountLabel;
+
+    // ── Tab tracking ──
+    private String currentTab = "ALL"; // ALL, ACTIVE, INACTIVE
+    private javax.swing.JButton allTabBtn, activeTabBtn, inactiveTabBtn;
 
     public StudentManagementFrame() {
         setLayout(new BorderLayout());
@@ -72,6 +115,14 @@ public class StudentManagementFrame extends JPanel {
         JPanel card = new JPanel(new BorderLayout());
         card.setBackground(CARD_BG);
         card.setBorder(BorderFactory.createLineBorder(new Color(225, 230, 240), 1, true));
+
+        // ── TAB PANEL (All / Active / Inactive) ──
+        card.add(createTabPanel(), BorderLayout.NORTH);
+
+        // ── NORTH-CENTER WRAPPER: Contains Filter Bar ──
+        JPanel northCenter = new JPanel(new BorderLayout());
+        northCenter.setBackground(CARD_BG);
+        northCenter.add(createFilterBar(), BorderLayout.NORTH);
 
         String[] cols = {"Student Name", "Standard", "Board", "City", "Join Date", "Actions"};
         model = new DefaultTableModel(cols, 0) {
@@ -116,10 +167,256 @@ public class StudentManagementFrame extends JPanel {
         scroll.setBorder(BorderFactory.createEmptyBorder());
         scroll.getViewport().setBackground(CARD_BG);
 
-        card.add(buildCardHeader("All Students"), BorderLayout.NORTH);
-        card.add(scroll, BorderLayout.CENTER);
+        northCenter.add(scroll, BorderLayout.CENTER);
+        card.add(northCenter, BorderLayout.CENTER);
         wrapper.add(card);
         return wrapper;
+    }
+
+    private JPanel createTabPanel() {
+        JPanel tabPanel = new JPanel(new BorderLayout());
+        tabPanel.setBackground(CARD_BG);
+        tabPanel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(230, 235, 245)),
+            new EmptyBorder(12, 20, 12, 20)
+        ));
+
+        JPanel tabs = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        tabs.setBackground(CARD_BG);
+
+        // Count labels
+        StudentFilterDAO filterDao = new StudentFilterDAO();
+        long activeCount = filterDao.getActiveStudentCount();
+        long inactiveCount = filterDao.getInactiveStudentCount();
+        long totalCount = filterDao.getTotalStudentCount();
+
+        allTabBtn = createTabButton("All Students (" + totalCount + ")", true);
+        allTabBtn.addActionListener(e -> {
+            currentTab = "ALL";
+            updateAllTabButtons();
+            applyFilters();
+        });
+
+        activeTabBtn = createTabButton("Active Students (" + activeCount + ")", false);
+        activeTabBtn.addActionListener(e -> {
+            currentTab = "ACTIVE";
+            updateAllTabButtons();
+            applyFilters();
+        });
+
+        inactiveTabBtn = createTabButton("Inactive Students (" + inactiveCount + ")", false);
+        inactiveTabBtn.addActionListener(e -> {
+            currentTab = "INACTIVE";
+            updateAllTabButtons();
+            applyFilters();
+        });
+
+        tabs.add(allTabBtn);
+        tabs.add(Box.createHorizontalStrut(2));
+        tabs.add(activeTabBtn);
+        tabs.add(Box.createHorizontalStrut(2));
+        tabs.add(inactiveTabBtn);
+
+        tabPanel.add(tabs, BorderLayout.WEST);
+
+        // Count info panel on the right
+        JPanel countPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 20, 0));
+        countPanel.setBackground(CARD_BG);
+        countPanel.add(createCountLabel("👥 " + totalCount, "Total"));
+        countPanel.add(createCountLabel("✓ " + activeCount, "Active"));
+        countPanel.add(createCountLabel("✗ " + inactiveCount, "Inactive"));
+
+        tabPanel.add(countPanel, BorderLayout.EAST);
+        return tabPanel;
+    }
+
+    private JButton createTabButton(String text, boolean active) {
+        JButton btn = new JButton(text);
+        btn.setFont(new Font("SansSerif", Font.BOLD, 12));
+        btn.setForeground(active ? ACCENT : TEXT_SEC);
+        btn.setBackground(CARD_BG);
+        btn.setBorder(BorderFactory.createMatteBorder(0, 0, active ? 3 : 0, 0, ACCENT));
+        btn.setContentAreaFilled(false);
+        btn.setFocusPainted(false);
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btn.setPreferredSize(new Dimension(200, 30));
+        return btn;
+    }
+
+    private JPanel createCountLabel(String number, String label) {
+        JPanel p = new JPanel(new GridLayout(2, 1, 0, 2));
+        p.setBackground(new Color(248, 250, 253));
+        p.setBorder(BorderFactory.createLineBorder(new Color(220, 225, 235), 1, true));
+        JLabel numLbl = new JLabel(number);
+        numLbl.setFont(new Font("SansSerif", Font.BOLD, 14));
+        numLbl.setForeground(ACCENT);
+        JLabel lblLabel = new JLabel(label);
+        lblLabel.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        lblLabel.setForeground(TEXT_SEC);
+        p.add(numLbl);
+        p.add(lblLabel);
+        p.setPreferredSize(new Dimension(90, 50));
+        return p;
+    }
+
+    private void updateAllTabButtons() {
+        allTabBtn.setForeground("ALL".equals(currentTab) ? ACCENT : TEXT_SEC);
+        allTabBtn.setBorder(BorderFactory.createMatteBorder(0, 0, "ALL".equals(currentTab) ? 3 : 0, 0, ACCENT));
+        
+        activeTabBtn.setForeground("ACTIVE".equals(currentTab) ? ACCENT : TEXT_SEC);
+        activeTabBtn.setBorder(BorderFactory.createMatteBorder(0, 0, "ACTIVE".equals(currentTab) ? 3 : 0, 0, ACCENT));
+        
+        inactiveTabBtn.setForeground("INACTIVE".equals(currentTab) ? ACCENT : TEXT_SEC);
+        inactiveTabBtn.setBorder(BorderFactory.createMatteBorder(0, 0, "INACTIVE".equals(currentTab) ? 3 : 0, 0, ACCENT));
+    }
+
+    private JPanel createFilterBar() {
+        JPanel filterPanel = new JPanel(new GridBagLayout());
+        filterPanel.setBackground(CARD_BG);
+        filterPanel.setBorder(new EmptyBorder(15, 20, 15, 20));
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.anchor = GridBagConstraints.WEST;
+
+        StudentFilterDAO filterDao = new StudentFilterDAO();
+
+        // Standard filter
+        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.1;
+        JLabel stdLabel = new JLabel("Standard:");
+        stdLabel.setFont(new Font("SansSerif", Font.BOLD, 11));
+        stdLabel.setForeground(TEXT_SEC);
+        filterPanel.add(stdLabel, gbc);
+
+        gbc.gridx = 1; gbc.weightx = 0.2;
+        standardCombo = new JComboBox<>();
+        standardCombo.addItem("All");
+        for (String std : filterDao.getAllStandards()) {
+            standardCombo.addItem(std);
+        }
+        filterPanel.add(standardCombo, gbc);
+
+        // Board filter
+        gbc.gridx = 2; gbc.weightx = 0.1;
+        JLabel boardLabel = new JLabel("Board:");
+        boardLabel.setFont(new Font("SansSerif", Font.BOLD, 11));
+        boardLabel.setForeground(TEXT_SEC);
+        filterPanel.add(boardLabel, gbc);
+
+        gbc.gridx = 3; gbc.weightx = 0.2;
+        boardCombo = new JComboBox<>();
+        boardCombo.addItem("All");
+        for (String board : filterDao.getAllBoards()) {
+            boardCombo.addItem(board);
+        }
+        filterPanel.add(boardCombo, gbc);
+
+        // City filter
+        gbc.gridx = 4; gbc.weightx = 0.1;
+        JLabel cityLabel = new JLabel("City:");
+        cityLabel.setFont(new Font("SansSerif", Font.BOLD, 11));
+        cityLabel.setForeground(TEXT_SEC);
+        filterPanel.add(cityLabel, gbc);
+
+        gbc.gridx = 5; gbc.weightx = 0.2;
+        cityCombo = new JComboBox<>();
+        cityCombo.addItem("All");
+        for (String city : filterDao.getAllCities()) {
+            cityCombo.addItem(city);
+        }
+        filterPanel.add(cityCombo, gbc);
+
+        // Second row
+        gbc.gridy = 1;
+
+        // Status filter
+        gbc.gridx = 0; gbc.weightx = 0.1;
+        JLabel statusLabel = new JLabel("Status:");
+        statusLabel.setFont(new Font("SansSerif", Font.BOLD, 11));
+        statusLabel.setForeground(TEXT_SEC);
+        filterPanel.add(statusLabel, gbc);
+
+        gbc.gridx = 1; gbc.weightx = 0.2;
+        statusCombo = new JComboBox<>(new String[]{"All", "Active", "Inactive"});
+        filterPanel.add(statusCombo, gbc);
+
+        // Search field
+        gbc.gridx = 2; gbc.weightx = 0.1;
+        JLabel searchLabel = new JLabel("Search:");
+        searchLabel.setFont(new Font("SansSerif", Font.BOLD, 11));
+        searchLabel.setForeground(TEXT_SEC);
+        filterPanel.add(searchLabel, gbc);
+
+        gbc.gridx = 3; gbc.gridwidth = 2; gbc.weightx = 0.4;
+        searchField = new JTextField();
+        searchField.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(200, 210, 225), 1, true),
+            new EmptyBorder(4, 8, 4, 8)
+        ));
+        filterPanel.add(searchField, gbc);
+
+        // Buttons
+        gbc.gridx = 5; gbc.gridwidth = 1; gbc.weightx = 0.2;
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+        btnPanel.setOpaque(false);
+        
+        JButton applyBtn = makeAccentButton("Apply", e -> applyFilters());
+        applyBtn.setPreferredSize(new Dimension(80, 28));
+        
+        JButton clearBtn = makeSecondaryButton("Clear", e -> clearFilters());
+        clearBtn.setPreferredSize(new Dimension(80, 28));
+        
+        btnPanel.add(applyBtn);
+        btnPanel.add(clearBtn);
+        filterPanel.add(btnPanel, gbc);
+
+        return filterPanel;
+    }
+
+    private void applyFilters() {
+        model.setRowCount(0);
+        StudentFilterDAO filterDao = new StudentFilterDAO();
+
+        String status = statusCombo.getSelectedItem().toString();
+        String standard = (String) standardCombo.getSelectedItem();
+        String board = (String) boardCombo.getSelectedItem();
+        String city = (String) cityCombo.getSelectedItem();
+        String search = searchField.getText().trim();
+
+        // Override with tab selection if not using status filter
+        if ("All".equals(status)) {
+            status = currentTab;
+        }
+
+        currentStudents = filterDao.filterStudents(status, standard, board, city, search.isEmpty() ? null : search);
+
+        UserDAO userDAO = new UserDAO();
+        for (Student s : currentStudents) {
+            java.util.Date joinDateRaw = s.getJoinDate();
+            if (joinDateRaw == null && s.getEmail() != null)
+                joinDateRaw = userDAO.getCreatedAtByEmail(s.getEmail());
+            if (joinDateRaw == null)
+                joinDateRaw = userDAO.getCreatedAt(s.getUserId());
+            String joinStr = joinDateRaw != null ? DATE_FMT.format(joinDateRaw) : "—";
+            String city_str    = s.getCity()       != null ? s.getCity()       : "—";
+            String std     = s.getCurrentStd() != null ? s.getCurrentStd() : "—";
+            String board_str   = s.getBoard()      != null ? s.getBoard()      : "—";
+            String name    = s.getName()       != null
+                             ? s.getName() + " (#" + s.getUserId() + ")"
+                             : "Unspecified (#" + s.getUserId() + ")";
+            model.addRow(new Object[]{name, std, board_str, city_str, joinStr, ""});
+        }
+    }
+
+    private void clearFilters() {
+        standardCombo.setSelectedIndex(0);
+        boardCombo.setSelectedIndex(0);
+        cityCombo.setSelectedIndex(0);
+        statusCombo.setSelectedIndex(0);
+        searchField.setText("");
+        currentTab = "ALL";
+        refreshTable();
     }
 
     private void refreshTable() {
@@ -470,21 +767,38 @@ public class StudentManagementFrame extends JPanel {
     private JButton makeAccentButton(String text, java.awt.event.ActionListener al) {
         JButton btn = new JButton(text) {
             @Override protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D)g.create(); g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(getModel().isRollover()?ACCENT_DARK:ACCENT); g2.fillRoundRect(0,0,getWidth(),getHeight(),20,20);
-                super.paintComponent(g2); g2.dispose();
+                Graphics2D g2 = (Graphics2D)g.create(); 
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(getModel().isRollover()?ACCENT_DARK:ACCENT); 
+                g2.fillRoundRect(0,0,getWidth(),getHeight(),10,10);
+                super.paintComponent(g2); 
+                g2.dispose();
             }
         };
-        btn.setContentAreaFilled(false); btn.setOpaque(false); btn.setBorderPainted(false);
-        btn.setForeground(Color.WHITE); btn.setFont(new Font("SansSerif",Font.BOLD,13));
-        btn.setPreferredSize(new Dimension(220,38)); btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        btn.setFocusPainted(false); if (al!=null) btn.addActionListener(al); return btn;
+        btn.setContentAreaFilled(false); 
+        btn.setOpaque(false); 
+        btn.setBorderPainted(false);
+        btn.setForeground(Color.WHITE); 
+        btn.setFont(new Font("SansSerif",Font.BOLD,13));
+        btn.setPreferredSize(new Dimension(220,38)); 
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btn.setFocusPainted(false); 
+        if (al!=null) btn.addActionListener(al); 
+        return btn;
     }
 
     private JButton makeSecondaryButton(String text, java.awt.event.ActionListener al) {
-        JButton btn = new JButton(text); btn.setBackground(CARD_BG); btn.setForeground(ACCENT);
-        btn.setFont(new Font("SansSerif",Font.BOLD,13)); btn.setFocusPainted(false);
-        btn.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(ACCENT,1,true),new EmptyBorder(6,16,6,16)));
-        btn.setCursor(new Cursor(Cursor.HAND_CURSOR)); if (al!=null) btn.addActionListener(al); return btn;
+        JButton btn = new JButton(text); 
+        btn.setBackground(CARD_BG); 
+        btn.setForeground(ACCENT);
+        btn.setFont(new Font("SansSerif",Font.BOLD,13)); 
+        btn.setFocusPainted(false);
+        btn.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(ACCENT,1,true),
+            new EmptyBorder(6,16,6,16)
+        ));
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR)); 
+        if (al!=null) btn.addActionListener(al); 
+        return btn;
     }
 }
