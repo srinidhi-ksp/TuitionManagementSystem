@@ -84,6 +84,21 @@ public class AttendanceDAO {
         return list;
     }
 
+    public double getAttendancePercentage(String studentId) {
+        if (attendanceCollection == null) return 0.0;
+        try {
+            List<Attendance> records = getAttendanceByStudentId(studentId);
+            if (records.isEmpty()) return 0.0;
+            long presentCount = records.stream()
+                    .filter(a -> "PRESENT".equalsIgnoreCase(a.getStatus()))
+                    .count();
+            return (double) presentCount / records.size() * 100;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return 0.0;
+    }
+
     public boolean deleteAttendance(int attendanceId) {
         if (attendanceCollection == null) return false;
         try {

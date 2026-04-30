@@ -13,17 +13,23 @@ public class Teacher extends User {
     private String street;
     private String city;
     private long pincode;
-    
+
     // New MongoDB fields
     private List<String> qualifications;
-    private Salary salary;
+    private Salary salary; // legacy nested salary object
+
+    // ── NEW flat fields (aligned with bulkWrite schema) ──
+    private Integer experienceYears;
+    private double salaryAmount;  // flat salary number (e.g. 50000)
+    private String highestDegree;
+    private String status;        // ACTIVE / INACTIVE
 
     public static class Salary {
         private double baseSalary;
         private int workingDays;
-        
+
         public Salary() {}
-        
+
         public Salary(double baseSalary, int workingDays) {
             this.baseSalary = baseSalary;
             this.workingDays = workingDays;
@@ -84,6 +90,27 @@ public class Teacher extends User {
 
     public Salary getSalary() { return salary; }
     public void setSalary(Salary salary) { this.salary = salary; }
+
+    // ── NEW flat field accessors ──
+
+    public Integer getExperienceYears() { return experienceYears; }
+    public void setExperienceYears(Integer experienceYears) { this.experienceYears = experienceYears; }
+
+    /**
+     * Returns flat salary amount. Falls back to nested Salary.baseSalary if not set.
+     */
+    public double getSalaryAmount() {
+        if (salaryAmount > 0) return salaryAmount;
+        if (salary != null && salary.getBaseSalary() > 0) return salary.getBaseSalary();
+        return 0;
+    }
+    public void setSalaryAmount(double salaryAmount) { this.salaryAmount = salaryAmount; }
+
+    public String getHighestDegree() { return highestDegree; }
+    public void setHighestDegree(String highestDegree) { this.highestDegree = highestDegree; }
+
+    public String getStatus() { return status != null ? status : "ACTIVE"; }
+    public void setStatus(String status) { this.status = status; }
 
     @Override
     public String toString() {

@@ -99,4 +99,37 @@ public class TestsDAO {
         }
         return tests;
     }
+    public List<model.TestMark> getStudentMarks(String studentId) {
+        List<model.TestMark> testMarks = new ArrayList<>();
+        if (marksCollection == null) return testMarks;
+
+        try {
+            // Find all marks for the student
+            com.mongodb.client.MongoCursor<Document> cursor = marksCollection.find(com.mongodb.client.model.Filters.eq("user_id", studentId)).iterator();
+            while (cursor.hasNext()) {
+                Document markDoc = cursor.next();
+                
+                // For each mark, find the test details
+                Integer testId = markDoc.getInteger("test_id");
+                if (testId != null) {
+                    Document testDoc = testsCollection.find(com.mongodb.client.model.Filters.eq("test_id", testId)).first();
+                    
+                    if (testDoc != null) {
+                        model.TestMark tm = new model.TestMark();
+                        tm.setMarkId(markDoc.getInteger("mark_id"));
+                        tm.setTestId(testId);
+                        tm.setTestName(testDoc.getString("test_name"));
+                        tm.setSubjectName(testDoc.getString("subject_name"));
+                        tm.setMaxMarks(testDoc.getInteger("max_marks"));
+                        tm.setMarksObtained(markDoc.getInteger("marks_obtained"));
+                        tm.setTestDate(testDoc.getDate("test_date"));
+                        testMarks.add(tm);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return testMarks;
+    }
 }
