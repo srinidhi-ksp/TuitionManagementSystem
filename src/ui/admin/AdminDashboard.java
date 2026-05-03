@@ -220,7 +220,7 @@ public class AdminDashboard extends JFrame {
     }
 
     // ── Sidebar ────────────────────────────────────────────────────────────────
-    private JPanel createSidebar() {
+    private JScrollPane createSidebar() {
         sidebarPanel = new JPanel();
         sidebarPanel.setName("sidebar");
         sidebarPanel.setLayout(new BoxLayout(sidebarPanel, BoxLayout.Y_AXIS));
@@ -259,7 +259,12 @@ public class AdminDashboard extends JFrame {
         sidebarPanel.add(logoutBtn);
         sidebarPanel.add(Box.createVerticalStrut(20));
 
-        return sidebarPanel;
+        JScrollPane sidebarScroll = new JScrollPane(sidebarPanel);
+        sidebarScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        sidebarScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        sidebarScroll.setBorder(null);
+
+        return sidebarScroll;
     }
 
     private void addSidebarSection(String text) {

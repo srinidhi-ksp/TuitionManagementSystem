@@ -141,7 +141,7 @@ public class StudentDashboard extends JFrame {
     private static final Color ACCENT      = new Color(50, 150, 250);
     private JButton activeBtn = null;
 
-    private JPanel createSidebar() {
+    private JScrollPane createSidebar() {
         sidebarPanel = new JPanel();
         sidebarPanel.setName("sidebar");
         sidebarPanel.setLayout(new BoxLayout(sidebarPanel, BoxLayout.Y_AXIS));
@@ -219,7 +219,12 @@ public class StudentDashboard extends JFrame {
         sidebarPanel.add(logoutBtn);
         sidebarPanel.add(Box.createRigidArea(new Dimension(0, 20)));
 
-        return sidebarPanel;
+        JScrollPane sidebarScroll = new JScrollPane(sidebarPanel);
+        sidebarScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        sidebarScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        sidebarScroll.setBorder(null);
+
+        return sidebarScroll;
     }
 
     private JButton createLogoutButton() {

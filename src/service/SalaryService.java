@@ -6,6 +6,7 @@ import java.util.Date;
 import java.util.List;
 
 import org.bson.Document;
+import org.bson.conversions.Bson;
 
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
@@ -51,12 +52,18 @@ public class SalaryService {
             cal.set(Calendar.MINUTE, 59);
             Date endOfMonth = cal.getTime();
 
-            // 3. Fetch attendance
+            // 3. Fetch attendance. CANCELLED records are ignored because only ABSENT is penalized.
             List<Document> attendances = new ArrayList<>();
+            String monthPrefix = String.format("%04d-%02d-", year, month);
+            Bson dateFilter = Filters.or(
+                Filters.regex("date_str", "^" + monthPrefix),
+                Filters.and(Filters.gte("attendance_date", startOfMonth), Filters.lte("attendance_date", endOfMonth)),
+                Filters.and(Filters.gte("date", startOfMonth), Filters.lte("date", endOfMonth))
+            );
             attendanceCollection.find(Filters.and(
-                Filters.eq("teacher_id", teacherId),
-                Filters.gte("date", startOfMonth),
-                Filters.lte("date", endOfMonth)
+                Filters.or(Filters.eq("user_id", teacherId), Filters.eq("teacher_id", teacherId)),
+                Filters.eq("type", "TEACHER"),
+                dateFilter
             )).into(attendances);
 
             int totalWorkingDays = cal.getActualMaximum(Calendar.DAY_OF_MONTH);
@@ -73,7 +80,7 @@ public class SalaryService {
             // Per prompt: Salary = Base - (Base/TotalDays * AbsentDays)
             double perDaySalary = baseSalary / totalWorkingDays;
             double deduction = perDaySalary * absentDays;
-            double finalSalary = baseSalary - deduction;
+            double finalSalary = Math.max(0, baseSalary - deduction);
 
             // 4. Save record
             SalaryRecord record = new SalaryRecord();

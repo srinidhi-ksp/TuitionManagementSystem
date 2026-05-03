@@ -78,6 +78,10 @@ public class Batch {
         this.teacherUserId = teacherUserId;
     }
 
+    public String getTeacherId() {
+        return teacherUserId;
+    }
+
     public String getBatchName() {
         return batchName;
     }
@@ -116,6 +120,10 @@ public class Batch {
 
     public void setClassMode(String classMode) {
         this.classMode = classMode;
+    }
+
+    public String getMode() {
+        return classMode;
     }
 
     public String getTiming() {

@@ -8,17 +8,15 @@ import java.util.List;
 
 import model.User;
 import model.Batch;
-import dao.BatchDAO;
-import dao.SubjectDAO;
+import service.TeacherPortalService;
+import util.SessionManager;
 
 public class MyBatchesPanel extends JPanel {
 
-    private User teacherContext;
     private JTable batchTable;
     private DefaultTableModel model;
 
     public MyBatchesPanel(User user) {
-        this.teacherContext = user;
         setLayout(new BorderLayout());
         setBackground(Color.WHITE);
         setBorder(new EmptyBorder(30, 40, 30, 40));
@@ -26,14 +24,14 @@ public class MyBatchesPanel extends JPanel {
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(Color.WHITE);
         header.setBorder(new EmptyBorder(0, 0, 20, 0));
-        
+
         JLabel title = new JLabel("My Assigned Batches");
         title.setFont(new Font("Arial", Font.BOLD, 24));
-        
+
         header.add(title, BorderLayout.WEST);
         add(header, BorderLayout.NORTH);
 
-        String columns[] = {"Batch Name", "Subject", "Schedule", "Mode", "Status"};
+        String columns[] = {"Batch Name", "Subject", "Schedule", "Students", "Mode", "Status"};
         model = new DefaultTableModel(columns, 0);
         batchTable = new JTable(model);
         batchTable.setRowHeight(40);
@@ -42,32 +40,65 @@ public class MyBatchesPanel extends JPanel {
         batchTable.setShowHorizontalLines(true);
         batchTable.setGridColor(new Color(230, 230, 230));
 
-        refreshTable();
-
         JScrollPane scrollPane = new JScrollPane(batchTable);
         scrollPane.setBorder(BorderFactory.createLineBorder(new Color(230,230,230)));
         scrollPane.getViewport().setBackground(Color.WHITE);
         add(scrollPane, BorderLayout.CENTER);
+
+        refreshTable();
     }
 
     private void refreshTable() {
         model.setRowCount(0);
-        List<Batch> assigned = new BatchDAO().getBatchesByTeacherId(teacherContext.getUserId());
-        SubjectDAO subDao = new SubjectDAO();
+        model.addRow(new Object[]{"Loading...", "", "", "", "", ""});
 
-        if (assigned != null) {
-            for (Batch b : assigned) {
-                String subName = "Unknown";
-                if (subDao.getSubjectById(b.getSubjectId()) != null) {
-                    subName = subDao.getSubjectById(b.getSubjectId()).getSubjectName();
-                }
-                String start = b.getStartTime() != null ? b.getStartTime().toString().substring(11,16) : "";
-                String end = b.getEndTime() != null ? b.getEndTime().toString().substring(11,16) : "";
-                
-                model.addRow(new Object[]{
-                    b.getBatchName(), subName, start + " - " + end, b.getClassMode(), "Active"
-                });
+        new SwingWorker<List<TeacherPortalService.BatchRow>, Void>() {
+            @Override protected List<TeacherPortalService.BatchRow> doInBackground() {
+                return new TeacherPortalService().getTeacherBatchRows(SessionManager.getCurrentTeacherId());
             }
+
+            @Override protected void done() {
+                try {
+                    List<TeacherPortalService.BatchRow> rows = get();
+                    model.setRowCount(0);
+                    if (rows.isEmpty()) {
+                        model.addRow(new Object[]{"No batches assigned", "-", "-", "0", "-", "-"});
+                        return;
+                    }
+                    for (TeacherPortalService.BatchRow row : rows) {
+                        Batch b = row.batch;
+                        model.addRow(new Object[]{
+                            safe(b.getBatchName()),
+                            safe(row.subjectName),
+                            formatSchedule(b),
+                            row.studentCount,
+                            safe(b.getClassMode()),
+                            safe(b.getStatus())
+                        });
+                    }
+                } catch (Exception e) {
+                    model.setRowCount(0);
+                    JOptionPane.showMessageDialog(MyBatchesPanel.this, "Failed to load batches: " + e.getMessage());
+                }
+            }
+        }.execute();
+    }
+
+    private String formatSchedule(Batch batch) {
+        if (batch.getSchedules() == null || batch.getSchedules().isEmpty()) {
+            return batch.getTiming() != null ? batch.getTiming() : "-";
         }
+        StringBuilder sb = new StringBuilder();
+        for (model.Schedule schedule : batch.getSchedules()) {
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(safe(schedule.getDay())).append(" ")
+              .append(safe(schedule.getStart())).append("-")
+              .append(safe(schedule.getEnd()));
+        }
+        return sb.toString();
+    }
+
+    private String safe(String value) {
+        return value == null || value.trim().isEmpty() ? "-" : value;
     }
 }

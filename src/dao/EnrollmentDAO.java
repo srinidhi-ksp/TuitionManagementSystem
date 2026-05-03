@@ -140,16 +140,56 @@ public class EnrollmentDAO {
     public List<String> getStudentIdsByBatchId(int batchId) {
         List<String> ids = new ArrayList<>();
         if (enrollmentCollection == null) return ids;
-        try (MongoCursor<Document> cursor = enrollmentCollection.find(Filters.eq("batch_id", batchId)).iterator()) {
+        try (MongoCursor<Document> cursor = enrollmentCollection.find(
+                Filters.and(
+                    Filters.eq("batch_id", batchId),
+                    Filters.regex("status", "^ACTIVE$", "i")
+                )
+            ).iterator()) {
             while (cursor.hasNext()) {
                 Document doc = cursor.next();
                 String sId = doc.getString("student_user_id");
+                if (sId == null) sId = doc.getString("student_id");
+                if (sId == null) sId = doc.getString("user_id");
                 if (sId != null) ids.add(sId);
             }
         } catch(Exception e) {
             e.printStackTrace();
         }
         return ids;
+    }
+
+    public List<Enrollment> getActiveEnrollmentsByBatchId(int batchId) {
+        List<Enrollment> list = new ArrayList<>();
+        if (enrollmentCollection == null) return list;
+        try (MongoCursor<Document> cursor = enrollmentCollection.find(
+                Filters.and(
+                    Filters.eq("batch_id", batchId),
+                    Filters.regex("status", "^ACTIVE$", "i")
+                )
+            ).iterator()) {
+            while (cursor.hasNext()) {
+                Enrollment e = DocumentMapper.documentToEnrollment(cursor.next());
+                if (e != null) list.add(e);
+            }
+        } catch(Exception e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
+    public List<Enrollment> getEnrollmentsByBatchId(int batchId) {
+        List<Enrollment> list = new ArrayList<>();
+        if (enrollmentCollection == null) return list;
+        try (MongoCursor<Document> cursor = enrollmentCollection.find(Filters.eq("batch_id", batchId)).iterator()) {
+            while (cursor.hasNext()) {
+                Enrollment e = DocumentMapper.documentToEnrollment(cursor.next());
+                if (e != null) list.add(e);
+            }
+        } catch(Exception e) {
+            e.printStackTrace();
+        }
+        return list;
     }
 
     // ✅ DUPLICATE ENROLLMENT CHECK
@@ -262,5 +302,20 @@ public class EnrollmentDAO {
             e.printStackTrace();
         }
         return results;
+    }
+
+    public int getEnrollmentCountByBatch(int batchId) {
+        if (enrollmentCollection == null) return 0;
+        try {
+            return (int) enrollmentCollection.countDocuments(
+                Filters.and(
+                    Filters.eq("batch_id", batchId),
+                    Filters.regex("status", "^ACTIVE$", "i")
+                )
+            );
+        } catch (Exception e) {
+            e.printStackTrace();
+            return 0;
+        }
     }
 }

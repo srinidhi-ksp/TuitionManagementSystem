@@ -5,8 +5,8 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.util.List;
 
-import model.Batch;
-import dao.BatchDAO;
+import model.Test;
+import service.TeacherPortalService;
 import util.SessionManager;
 
 public class OverviewPanel extends JPanel {
@@ -24,10 +24,10 @@ public class OverviewPanel extends JPanel {
         JPanel header = new JPanel(new GridLayout(2, 1));
         header.setBackground(bgLight);
         header.setBorder(new EmptyBorder(0, 0, 20, 0));
-        
+
         title = new JLabel("Welcome back!");
         title.setFont(new Font("Serif", Font.BOLD, 28));
-        
+
         JLabel subtitle = new JLabel("Your Academic Dashboard Overview");
         subtitle.setFont(new Font("Arial", Font.PLAIN, 14));
         subtitle.setForeground(Color.GRAY);
@@ -45,7 +45,7 @@ public class OverviewPanel extends JPanel {
         topSection.add(statsPanel, BorderLayout.CENTER);
 
         add(topSection, BorderLayout.NORTH);
-        
+
         lowerPanel = new JPanel(new GridLayout(1, 2, 20, 0));
         lowerPanel.setBackground(bgLight);
         lowerPanel.setBorder(new EmptyBorder(20, 0, 0, 0));
@@ -69,14 +69,14 @@ public class OverviewPanel extends JPanel {
         JLabel titleLabel = new JLabel(title);
         titleLabel.setForeground(Color.GRAY);
         titleLabel.setFont(new Font("Arial", Font.PLAIN, 14));
-        
+
         JLabel valueLabel = new JLabel(value);
         valueLabel.setFont(new Font("Arial", Font.BOLD, 28));
-        
+
         textPanel.add(titleLabel);
         textPanel.add(valueLabel);
 
-        JLabel iconLabel = new JLabel("●");
+        JLabel iconLabel = new JLabel("*");
         iconLabel.setForeground(iconColor);
         iconLabel.setFont(new Font("Arial", Font.BOLD, 30));
 
@@ -85,107 +85,97 @@ public class OverviewPanel extends JPanel {
 
         return card;
     }
-    
-    private JPanel createTodayClassesCard(List<Batch> batches) {
-        JPanel card = new JPanel(new BorderLayout());
-        card.setBackground(Color.WHITE);
-        card.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(new Color(230,230,230), 1, true),
-            new EmptyBorder(20, 20, 20, 20)
-        ));
-        
-        JLabel t = new JLabel("Today's Classes");
-        t.setFont(new Font("Arial", Font.BOLD, 16));
-        t.setBorder(new EmptyBorder(0,0,10,0));
-        card.add(t, BorderLayout.NORTH);
-        
-        JPanel list = new JPanel();
-        list.setLayout(new BoxLayout(list, BoxLayout.Y_AXIS));
-        list.setBackground(Color.WHITE);
-        
-        if (batches != null && !batches.isEmpty()) {
-            for (Batch b : batches) {
-                String subText = b.getBatchName() + " (" + (b.getStartTime() != null ? b.getStartTime().toString().substring(11,16) : "") + ")";
-                JLabel l = new JLabel("• " + subText);
-                l.setForeground(Color.DARK_GRAY);
-                l.setBorder(new EmptyBorder(5,0,5,0));
-                list.add(l);
+
+    private JPanel createTodayClassesCard(List<TeacherPortalService.ScheduleItem> classes) {
+        JPanel card = createListCard("Today's Classes");
+        JPanel list = (JPanel) ((JScrollPane) card.getComponent(1)).getViewport().getView();
+
+        if (classes != null && !classes.isEmpty()) {
+            for (TeacherPortalService.ScheduleItem item : classes) {
+                JLabel row = new JLabel("- " + item.batch.getBatchName() + " (" + item.schedule.getStart() + " - " + item.schedule.getEnd() + ")");
+                row.setForeground(Color.DARK_GRAY);
+                row.setBorder(new EmptyBorder(5,0,5,0));
+                list.add(row);
             }
         } else {
             JLabel empty = new JLabel("No classes scheduled today.");
             empty.setForeground(Color.GRAY);
             list.add(empty);
         }
-        
-        card.add(new JScrollPane(list), BorderLayout.CENTER);
         return card;
     }
 
-    private JPanel createPendingTasksCard() {
+    private JPanel createPendingTasksCard(List<Test> pendingTests) {
+        JPanel card = createListCard("Action Items");
+        JPanel list = (JPanel) ((JScrollPane) card.getComponent(1)).getViewport().getView();
+
+        if (pendingTests != null && !pendingTests.isEmpty()) {
+            for (Test test : pendingTests) {
+                JLabel row = new JLabel("- " + test.getTestName() + " marks pending");
+                row.setForeground(new Color(255, 150, 50));
+                row.setBorder(new EmptyBorder(5,0,5,0));
+                list.add(row);
+            }
+        } else {
+            JLabel empty = new JLabel("No pending evaluations.");
+            empty.setForeground(Color.GRAY);
+            list.add(empty);
+        }
+        return card;
+    }
+
+    private JPanel createListCard(String heading) {
         JPanel card = new JPanel(new BorderLayout());
         card.setBackground(Color.WHITE);
         card.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createLineBorder(new Color(230,230,230), 1, true),
             new EmptyBorder(20, 20, 20, 20)
         ));
-        
-        JLabel t = new JLabel("Action Items");
+
+        JLabel t = new JLabel(heading);
         t.setFont(new Font("Arial", Font.BOLD, 16));
         t.setBorder(new EmptyBorder(0,0,10,0));
         card.add(t, BorderLayout.NORTH);
-        
+
         JPanel list = new JPanel();
         list.setLayout(new BoxLayout(list, BoxLayout.Y_AXIS));
         list.setBackground(Color.WHITE);
-        
-        JLabel n1 = new JLabel("• Warning: Class 10th Math attendance not marked yesterday");
-        n1.setForeground(new Color(220, 80, 80));
-        n1.setBorder(new EmptyBorder(5,0,5,0));
-        
-        JLabel n2 = new JLabel("• Reminder: Quantum Physics midterm marks pending");
-        n2.setForeground(new Color(255, 150, 50));
-        n2.setBorder(new EmptyBorder(5,0,5,0));
-        
-        list.add(n1);
-        list.add(n2);
-        
-        card.add(list, BorderLayout.CENTER);
+
+        JScrollPane scrollPane = new JScrollPane(list);
+        scrollPane.setBorder(null);
+        card.add(scrollPane, BorderLayout.CENTER);
         return card;
     }
 
     private void loadOverviewDataAsync() {
-        new SwingWorker<List<Batch>, Void>() {
+        new SwingWorker<TeacherPortalService.DashboardData, Void>() {
             @Override
-            protected List<Batch> doInBackground() throws Exception {
-                String userId = SessionManager.getInstance().getUserId();
-                if (userId == null) return new java.util.ArrayList<>();
-                return new BatchDAO().getBatchesByTeacherId(userId);
+            protected TeacherPortalService.DashboardData doInBackground() {
+                return new TeacherPortalService().getDashboardData(SessionManager.getCurrentTeacherId());
             }
 
             @Override
             protected void done() {
                 try {
-                    List<Batch> myBatches = get();
-                    int batchCount = myBatches != null ? myBatches.size() : 0;
-
+                    TeacherPortalService.DashboardData data = get();
                     String userName = SessionManager.getInstance().getUserName();
-                    title.setText("Welcome back, " + (userName != null ? userName : "Teacher") + " 👋");
+                    title.setText("Welcome back, " + (userName != null ? userName : "Teacher"));
 
                     statsPanel.removeAll();
-                    statsPanel.add(createModernStatCard("Assigned Batches", String.valueOf(batchCount), new Color(100, 150, 255)));
-                    statsPanel.add(createModernStatCard("Total Students", "72", new Color(100, 200, 150))); // mock
-                    statsPanel.add(createModernStatCard("Avg Attendance", "88%", new Color(180, 100, 255))); // mock
-                    statsPanel.add(createModernStatCard("Pending Tasks", "3", new Color(255, 100, 100))); // mock
+                    statsPanel.add(createModernStatCard("Assigned Batches", String.valueOf(data.totalBatches), new Color(100, 150, 255)));
+                    statsPanel.add(createModernStatCard("Total Students", String.valueOf(data.totalStudents), new Color(100, 200, 150)));
+                    statsPanel.add(createModernStatCard("Pending Eval", String.valueOf(data.pendingEvaluations), new Color(180, 100, 255)));
+                    statsPanel.add(createModernStatCard("Today's Classes", String.valueOf(data.todayClasses.size()), new Color(255, 100, 100)));
                     statsPanel.revalidate();
                     statsPanel.repaint();
 
                     lowerPanel.removeAll();
-                    lowerPanel.add(createTodayClassesCard(myBatches));
-                    lowerPanel.add(createPendingTasksCard());
+                    lowerPanel.add(createTodayClassesCard(data.todayClasses));
+                    lowerPanel.add(createPendingTasksCard(data.pendingTests));
                     lowerPanel.revalidate();
                     lowerPanel.repaint();
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    JOptionPane.showMessageDialog(OverviewPanel.this, "Failed to load dashboard data: " + e.getMessage());
                 }
             }
         }.execute();

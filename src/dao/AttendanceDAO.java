@@ -89,10 +89,14 @@ public class AttendanceDAO {
         try {
             List<Attendance> records = getAttendanceByStudentId(studentId);
             if (records.isEmpty()) return 0.0;
+            long relevantCount = records.stream()
+                    .filter(a -> !"CANCELLED".equalsIgnoreCase(a.getStatus()))
+                    .count();
+            if (relevantCount == 0) return 0.0;
             long presentCount = records.stream()
                     .filter(a -> "PRESENT".equalsIgnoreCase(a.getStatus()))
                     .count();
-            return (double) presentCount / records.size() * 100;
+            return (double) presentCount / relevantCount * 100;
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -116,6 +120,7 @@ public class AttendanceDAO {
         summary.put("PRESENT", 0);
         summary.put("ABSENT", 0);
         summary.put("LEAVE", 0);
+        summary.put("CANCELLED", 0);
 
         if (attendanceCollection == null) return summary;
         try (MongoCursor<Document> cursor = attendanceCollection.find().iterator()) {
@@ -159,6 +164,9 @@ public class AttendanceDAO {
             Document doc = DocumentMapper.attendanceToDocument(att);
             doc.append("batch_id", batchId);
             doc.append("date_str", dateStr);
+            doc.append("type", "STUDENT");
+            doc.append("student_id", att.getUserId());
+            if (att.getMarkedBy() != null) doc.append("teacher_id", att.getMarkedBy());
             attendanceCollection.replaceOne(
                 Filters.and(
                     Filters.eq("user_id",  att.getUserId()),
@@ -173,6 +181,59 @@ public class AttendanceDAO {
             e.printStackTrace();
         }
         return false;
+    }
+
+    public boolean hasAttendanceForBatchAndDate(int batchId, String dateStr) {
+        if (attendanceCollection == null) return false;
+        try {
+            return attendanceCollection.countDocuments(
+                Filters.and(
+                    Filters.eq("batch_id", batchId),
+                    Filters.eq("date_str", dateStr),
+                    Filters.eq("type", "STUDENT")
+                )
+            ) > 0;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    public boolean saveBatchAttendance(String teacherId, int batchId, String dateStr, Map<String, String> studentStatuses) {
+        if (attendanceCollection == null || studentStatuses == null) return false;
+        try {
+            java.util.Date attendanceDate = parseDateOrToday(dateStr);
+            for (Map.Entry<String, String> entry : studentStatuses.entrySet()) {
+                String studentId = entry.getKey();
+                String status = normalizeStatus(entry.getValue());
+                Document doc = new Document()
+                    .append("_id", Math.abs((studentId + "_" + batchId + "_" + dateStr).hashCode()))
+                    .append("teacher_id", teacherId)
+                    .append("batch_id", batchId)
+                    .append("student_id", studentId)
+                    .append("user_id", studentId)
+                    .append("date", attendanceDate)
+                    .append("attendance_date", attendanceDate)
+                    .append("date_str", dateStr)
+                    .append("status", status)
+                    .append("type", "STUDENT")
+                    .append("marked_by", teacherId);
+                attendanceCollection.replaceOne(
+                    Filters.and(
+                        Filters.eq("student_id", studentId),
+                        Filters.eq("batch_id", batchId),
+                        Filters.eq("date_str", dateStr),
+                        Filters.eq("type", "STUDENT")
+                    ),
+                    doc,
+                    new ReplaceOptions().upsert(true)
+                );
+            }
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
     }
 
     // ── Teacher attendance ──────────────────────────────────────────────────────
@@ -206,11 +267,13 @@ public class AttendanceDAO {
         try {
             Document doc = new Document()
                 .append("user_id",         teacherId)
+                .append("teacher_id",      teacherId)
                 .append("status",          status)
                 .append("date_str",        dateStr)
                 .append("type",            "TEACHER")
                 .append("marked_by",       "ADMIN")
-                .append("attendance_date", new java.util.Date());
+                .append("attendance_date", parseDateOrToday(dateStr))
+                .append("date",            parseDateOrToday(dateStr));
             attendanceCollection.replaceOne(
                 Filters.and(
                     Filters.eq("user_id",  teacherId),
@@ -238,5 +301,20 @@ public class AttendanceDAO {
             e.printStackTrace();
         }
         return false;
+    }
+
+    private String normalizeStatus(String status) {
+        if (status == null) return "PRESENT";
+        return status.trim().toUpperCase();
+    }
+
+    private java.util.Date parseDateOrToday(String dateStr) {
+        try {
+            java.text.SimpleDateFormat fmt = new java.text.SimpleDateFormat("yyyy-MM-dd");
+            fmt.setLenient(false);
+            return fmt.parse(dateStr);
+        } catch (Exception ignored) {
+            return new java.util.Date();
+        }
     }
 }

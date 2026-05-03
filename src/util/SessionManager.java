@@ -34,4 +34,9 @@ public class SessionManager {
     public String getRole() { return role; }
     public String getUserName() { return userName; }
     public String getUserEmail() { return userEmail; }
+
+    public static String getCurrentTeacherId() {
+        SessionManager session = getInstance();
+        return session.getUserId();
+    }
 }

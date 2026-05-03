@@ -36,7 +36,7 @@ public class TeacherDashboard extends JFrame {
         mainContentPanel.add(new TestsMarksPanel(user), "Tests & Marks");
         mainContentPanel.add(new SyllabusUpdatePanel(user), "Syllabus Progress");
         mainContentPanel.add(new StudentsListPanel(user), "My Students");
-        mainContentPanel.add(new ui.common.TimetablePanel("TEACHER", user.getUserId()), "Timetable");
+        mainContentPanel.add(new TeacherTimetablePanel(), "Timetable");
         mainContentPanel.add(new ProfilePanel(user), "Profile");
 
         add(createTopNavbar(), BorderLayout.NORTH);
@@ -111,7 +111,7 @@ public class TeacherDashboard extends JFrame {
         return topPanel;
     }
 
-    private JPanel createSidebar() {
+    private JScrollPane createSidebar() {
         sidebarPanel = new JPanel();
         sidebarPanel.setLayout(new BoxLayout(sidebarPanel, BoxLayout.Y_AXIS));
         sidebarPanel.setPreferredSize(new Dimension(230, 0));
@@ -163,6 +163,11 @@ public class TeacherDashboard extends JFrame {
             ((JButton)firstBtn).setForeground(brandColor);
         }
 
-        return sidebarPanel;
+        JScrollPane sidebarScroll = new JScrollPane(sidebarPanel);
+        sidebarScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        sidebarScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        sidebarScroll.setBorder(null);
+
+        return sidebarScroll;
     }
 }

@@ -94,7 +94,7 @@ public class SalaryManagementPanel extends JPanel {
     }
 
     private void initTable() {
-        String[] cols = {"Teacher ID", "Teacher Name", "Month", "Present", "Absent", "Deduction", "Final Salary"};
+        String[] cols = {"Teacher ID", "Teacher Name", "Month", "Absent", "Deduction", "Final Salary"};
         tableModel = new DefaultTableModel(cols, 0);
         salaryTable = new JTable(tableModel);
         
@@ -128,19 +128,21 @@ public class SalaryManagementPanel extends JPanel {
         for (SalaryRecord r : records) {
             Teacher t = teacherDAO.getTeacherById(r.getTeacherId());
             String name = t != null ? t.getName() : "Unknown";
+            boolean noData = (r.getPresentDays() == 0 && r.getAbsentDays() == 0);
             
             tableModel.addRow(new Object[]{
                 r.getTeacherId(),
                 name,
                 r.getMonth() + "/" + r.getYear(),
-                r.getPresentDays(),
-                r.getAbsentDays(),
-                String.format("₹%.2f", r.getDeduction()),
-                String.format("₹%.2f", r.getFinalSalary())
+                noData ? "No Data" : r.getAbsentDays(),
+                noData ? "No Data" : String.format("₹%.2f", r.getDeduction()),
+                noData ? "No Data" : String.format("₹%.2f", r.getFinalSalary())
             });
 
-            totalPaid += r.getFinalSalary();
-            totalDed += r.getDeduction();
+            if (!noData) {
+                totalPaid += r.getFinalSalary();
+                totalDed += r.getDeduction();
+            }
         }
 
         teachersCountLbl.setText(String.valueOf(records.size()));

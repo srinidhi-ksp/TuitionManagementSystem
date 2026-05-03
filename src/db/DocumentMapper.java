@@ -724,6 +724,7 @@ public class DocumentMapper {
         else if (chapterObj != null) try { cp.setChapterId(Integer.parseInt(chapterObj.toString())); } catch (Exception ex) {}
         
         cp.setStatus(doc.getString("status"));
+        cp.setRemarks(doc.getString("remarks"));
         
         Object percentObj = doc.get("completion_percentage");
         if (percentObj instanceof Number) cp.setCompletionPercentage(((Number) percentObj).intValue());
@@ -741,6 +742,7 @@ public class DocumentMapper {
         doc.append("batch_id", cp.getBatchId());
         doc.append("chapter_id", cp.getChapterId());
         doc.append("status", cp.getStatus());
+        doc.append("remarks", cp.getRemarks());
         doc.append("completion_percentage", cp.getCompletionPercentage());
         doc.append("last_updated", cp.getLastUpdated());
         return doc;

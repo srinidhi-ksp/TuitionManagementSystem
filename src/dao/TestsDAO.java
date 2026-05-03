@@ -9,6 +9,7 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.Updates;
 
 import db.DBConnection;
 import db.DocumentMapper;
@@ -40,6 +41,22 @@ public class TestsDAO {
         return false;
     }
 
+    public boolean addTeacherTest(Test t, String teacherId) {
+        if (testsCollection == null) return false;
+        try {
+            Document doc = DocumentMapper.testToDocument(t);
+            doc.append("teacher_id", teacherId);
+            doc.append("total_marks", t.getMaxMarks());
+            doc.append("date", t.getTestDate());
+            if (!doc.containsKey("attempts")) doc.append("attempts", new ArrayList<Document>());
+            testsCollection.insertOne(doc);
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
     public List<Test> getTestsByBatchId(int batchId) {
         List<Test> tests = new ArrayList<>();
         if (testsCollection == null) return tests;
@@ -56,6 +73,113 @@ public class TestsDAO {
             e.printStackTrace();
         }
         return tests;
+    }
+
+    public List<Test> getTestsByTeacherAndBatch(String teacherId, int batchId) {
+        List<Test> tests = new ArrayList<>();
+        if (testsCollection == null) return tests;
+        try (MongoCursor<Document> cursor = testsCollection.find(
+                Filters.and(
+                    Filters.eq("teacher_id", teacherId),
+                    Filters.eq("batch_id", batchId)
+                )
+            ).iterator()) {
+            while (cursor.hasNext()) {
+                Test t = DocumentMapper.documentToTest(cursor.next());
+                if (t != null) tests.add(t);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return tests;
+    }
+
+    public int countPendingEvaluationsByTeacher(String teacherId) {
+        if (testsCollection == null) return 0;
+        try {
+            return (int) testsCollection.countDocuments(
+                Filters.and(
+                    Filters.eq("teacher_id", teacherId),
+                    Filters.eq("attempts.status", "PENDING")
+                )
+            );
+        } catch (Exception e) {
+            e.printStackTrace();
+            return 0;
+        }
+    }
+
+    public List<Test> getPendingTestsByTeacher(String teacherId) {
+        List<Test> tests = new ArrayList<>();
+        if (testsCollection == null) return tests;
+        try (MongoCursor<Document> cursor = testsCollection.find(
+                Filters.and(
+                    Filters.eq("teacher_id", teacherId),
+                    Filters.eq("attempts.status", "PENDING")
+                )
+            ).iterator()) {
+            while (cursor.hasNext()) {
+                Test t = DocumentMapper.documentToTest(cursor.next());
+                if (t != null) tests.add(t);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return tests;
+    }
+
+    public Integer getExistingScore(int testId, String studentId) {
+        if (testsCollection == null) return null;
+        try {
+            Document doc = testsCollection.find(
+                Filters.and(
+                    Filters.eq("_id", testId),
+                    Filters.eq("attempts.student_id", studentId)
+                )
+            ).first();
+            if (doc == null) return null;
+            List<Document> attempts = doc.getList("attempts", Document.class);
+            if (attempts == null) return null;
+            for (Document attempt : attempts) {
+                if (studentId.equals(attempt.getString("student_id"))) {
+                    Object score = attempt.get("score");
+                    if (score instanceof Number) return ((Number) score).intValue();
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public boolean saveAttempt(int testId, String studentId, int score) {
+        if (testsCollection == null) return false;
+        try {
+            long matched = testsCollection.updateOne(
+                Filters.and(
+                    Filters.eq("_id", testId),
+                    Filters.eq("attempts.student_id", studentId)
+                ),
+                Updates.combine(
+                    Updates.set("attempts.$.score", score),
+                    Updates.set("attempts.$.status", "EVALUATED"),
+                    Updates.set("attempts.$.date", new java.util.Date())
+                )
+            ).getMatchedCount();
+
+            if (matched == 0) {
+                Document attempt = new Document()
+                    .append("student_id", studentId)
+                    .append("score", score)
+                    .append("status", "EVALUATED")
+                    .append("date", new java.util.Date());
+                testsCollection.updateOne(Filters.eq("_id", testId), Updates.push("attempts", attempt));
+            }
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
     }
 
     public boolean saveMark(int testId, String userId, int marksObtained) {
