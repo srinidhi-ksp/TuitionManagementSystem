@@ -82,7 +82,7 @@ public class EnrollmentDAO {
                         Filters.eq("student_id", tid),
                         Filters.eq("user_id", tid)
                     ),
-                    Filters.eq("status", "ACTIVE")
+                    Filters.regex("status", "^ACTIVE$", "i")
                 )
             ).iterator();
 
@@ -152,6 +152,31 @@ public class EnrollmentDAO {
         return ids;
     }
 
+    // ✅ DUPLICATE ENROLLMENT CHECK
+    public boolean isDuplicateEnrollment(String studentId, int batchId) {
+        if (enrollmentCollection == null || studentId == null) return false;
+        try {
+            String sid = studentId.trim();
+            // Check if student is already enrolled in this batch with ACTIVE status
+            Document existing = enrollmentCollection.find(
+                Filters.and(
+                    Filters.or(
+                        Filters.eq("student_user_id", sid),
+                        Filters.eq("student_id", sid),
+                        Filters.eq("user_id", sid)
+                    ),
+                    Filters.eq("batch_id", batchId),
+                    Filters.regex("status", "^ACTIVE$", "i")
+                )
+            ).first();
+            
+            return existing != null;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
     public boolean deleteEnrollment(int enrollmentId) {
         if (enrollmentCollection == null) return false;
         try {
@@ -188,7 +213,7 @@ public class EnrollmentDAO {
             PaymentDAO paymentDao = new PaymentDAO();
             BatchDAO batchDao = new BatchDAO();
             
-            try (MongoCursor<Document> cursor = enrollmentCollection.find(Filters.eq("status", "ACTIVE")).iterator()) {
+            try (MongoCursor<Document> cursor = enrollmentCollection.find(Filters.regex("status", "^ACTIVE$", "i")).iterator()) {
                 while (cursor.hasNext()) {
                     Document doc = cursor.next();
                     String studentId = doc.getString("student_user_id");
@@ -197,14 +222,14 @@ public class EnrollmentDAO {
                     Integer batchId = doc.getInteger("batch_id");
                     if (batchId != null) {
                         model.Batch b = batchDao.getBatchById(batchId);
-                        if (b != null && paymentDao.isSubjectPaid(studentId, String.valueOf(b.getSubjectId()))) {
+                        if (b != null && paymentDao.isBatchPaid(studentId, b.getBatchId())) {
                             paidCount++;
                         }
                     }
                 }
             }
             
-            long totalActive = enrollmentCollection.countDocuments(Filters.eq("status", "ACTIVE"));
+            long totalActive = enrollmentCollection.countDocuments(Filters.regex("status", "^ACTIVE$", "i"));
             stats.put("paid", paidCount);
             stats.put("unpaid", Math.max(0, totalActive - paidCount));
             

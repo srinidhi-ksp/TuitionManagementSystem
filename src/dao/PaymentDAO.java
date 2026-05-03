@@ -1,12 +1,15 @@
 package dao;
 
+import java.util.Date;
+
 import org.bson.Document;
+
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
+
 import db.DBConnection;
 import model.Payment;
-import java.util.Date;
 
 /**
  * Payment DAO - Handles all payment-related database operations
@@ -30,25 +33,28 @@ public class PaymentDAO {
     }
 
     /**
-     * Check if a subject is paid for a student
+     * Get payment record for a specific student and batch for a given month
      */
-    public boolean isSubjectPaid(String studentId, String subjectId) {
-        if (paymentCollection == null) return false;
+    public Payment getPaymentForBatch(String studentId, int batchId, String month) {
+        if (paymentCollection == null) return null;
 
         try {
-            Document payment = paymentCollection.find(
+            Document doc = paymentCollection.find(
                 Filters.and(
                     Filters.eq("student_id", studentId),
-                    Filters.eq("subject_id", subjectId)
+                    Filters.eq("batch_id", batchId),
+                    Filters.eq("month", month)
                 )
             ).first();
 
-            return payment != null;
+            if (doc != null) {
+                return db.DocumentMapper.documentToPayment(doc);
+            }
 
         } catch (Exception e) {
             System.err.println("[PaymentDAO] Error checking payment status: " + e.getMessage());
-            return false;
         }
+        return null;
     }
 
     /**
@@ -63,11 +69,12 @@ public class PaymentDAO {
         try {
             Document doc = new Document()
                 .append("student_id", payment.getStudentId())
-                .append("subject_id", payment.getSubjectId())
-                .append("amount_paid", payment.getAmountPaid())
+                .append("batch_id", payment.getBatchId())
+                .append("amount", payment.getAmountPaid())
                 .append("payment_mode", payment.getPaymentMode())
                 .append("payment_date", payment.getPaymentDate())
-                .append("month", payment.getMonth())
+                .append("month", payment.getMonthStr())
+                .append("status", payment.getStatus() != null ? payment.getStatus() : "PAID")
                 .append("created_at", new Date());
 
             paymentCollection.insertOne(doc);
@@ -81,29 +88,19 @@ public class PaymentDAO {
         }
     }
 
-    /**
-     * Get payment record for a specific student-subject combination
-     */
-    public Payment getPayment(String studentId, String subjectId) {
+    public Payment getPayment(String studentId, int batchId) {
         if (paymentCollection == null) return null;
 
         try {
             Document doc = paymentCollection.find(
                 Filters.and(
                     Filters.eq("student_id", studentId),
-                    Filters.eq("subject_id", subjectId)
+                    Filters.eq("batch_id", batchId)
                 )
             ).first();
 
             if (doc != null) {
-                Payment payment = new Payment();
-                payment.setStudentId(doc.getString("student_id"));
-                payment.setSubjectId(doc.getString("subject_id"));
-                payment.setAmountPaid(doc.getDouble("amount_paid"));
-                payment.setPaymentMode(doc.getString("payment_mode"));
-                payment.setPaymentDate(doc.getDate("payment_date"));
-                payment.setMonth(doc.getInteger("month"));
-                return payment;
+                return db.DocumentMapper.documentToPayment(doc);
             }
 
         } catch (Exception e) {
@@ -116,14 +113,14 @@ public class PaymentDAO {
     /**
      * Delete a payment record (for undoing payments)
      */
-    public boolean deletePayment(String studentId, String subjectId) {
+    public boolean deletePayment(String studentId, int batchId) {
         if (paymentCollection == null) return false;
 
         try {
             long deletedCount = paymentCollection.deleteOne(
                 Filters.and(
                     Filters.eq("student_id", studentId),
-                    Filters.eq("subject_id", subjectId)
+                    Filters.eq("batch_id", batchId)
                 )
             ).getDeletedCount();
 
@@ -131,6 +128,54 @@ public class PaymentDAO {
 
         } catch (Exception e) {
             System.err.println("[PaymentDAO] Error deleting payment: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Check if a student has paid for a specific batch in the current month
+     */
+    public boolean isBatchPaid(String studentId, int batchId) {
+        if (paymentCollection == null) return false;
+        
+        String currentMonth = new java.text.SimpleDateFormat("yyyy-MM").format(new java.util.Date());
+        
+        try {
+            Document doc = paymentCollection.find(
+                Filters.and(
+                    Filters.eq("student_id", studentId),
+                    Filters.eq("batch_id", batchId),
+                    Filters.eq("month", currentMonth),
+                    Filters.eq("status", "PAID")
+                )
+            ).first();
+
+            return doc != null;
+        } catch (Exception e) {
+            System.err.println("[PaymentDAO] Error checking batch payment: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Check if a student has paid for a specific subject (LEGACY)
+     */
+    public boolean isSubjectPaid(String studentId, String subjectId) {
+        if (paymentCollection == null) return false;
+
+        try {
+            Document doc = paymentCollection.find(
+                Filters.and(
+                    Filters.eq("student_id", studentId),
+                    Filters.eq("subject_id", subjectId),
+                    Filters.eq("status", "PAID")
+                )
+            ).first();
+
+            return doc != null;
+
+        } catch (Exception e) {
+            System.err.println("[PaymentDAO] Error checking subject payment: " + e.getMessage());
             return false;
         }
     }

@@ -38,19 +38,10 @@ public class ParentPortalService {
     }
 
     /**
-     * Get linked students for a parent
+     * Get linked students for a parent (using parent_user_id)
      */
     public List<Student> getLinkedStudents(String parentUserId) {
-        Parent p = parentDAO.getByUserId(parentUserId);
-        List<Student> students = new ArrayList<>();
-        if (p != null && p.getLinkedStudentIds() != null) {
-            for (String sId : p.getLinkedStudentIds()) {
-                Student s = studentDAO.getStudentByUserId(sId);
-                if (s == null) s = studentDAO.getStudentById(sId);
-                if (s != null) students.add(s);
-            }
-        }
-        return students;
+        return studentDAO.getStudentsByParentUserId(parentUserId);
     }
 
     /**

@@ -25,10 +25,16 @@ public class StudentProfileService {
         String studentId = student.getUserId();
 
         // 2. Parent Details
-        profile.setParentName(student.getParentName());
-        profile.setParentPhone(student.getParentPhone());
-        profile.setParentOccupation(student.getParentOccupation());
-        profile.setParentRelation(student.getParentRelation());
+        String parentUserId = student.getParentUserId();
+        if (parentUserId != null) {
+            Parent parent = new ParentDAO().getByUserId(parentUserId);
+            if (parent != null) {
+                profile.setParentName(parent.getName());
+                profile.setParentPhone(parent.getPhone());
+                profile.setParentOccupation(parent.getOccupation());
+                profile.setParentRelation(parent.getRelationType() != null ? parent.getRelationType() : "Father");
+            }
+        }
 
         // 3. Fee Summary
         profile.setFeeSummary(feeService.getFeeSummary(studentId));

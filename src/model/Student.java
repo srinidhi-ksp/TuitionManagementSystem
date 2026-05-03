@@ -14,14 +14,14 @@ public class Student extends User {
     private String city;
     private long pincode;
     
-    private Parent parent; // Nested embedded object (backward compat)
-
-    // ── Flat parent convenience fields (populated from student.parent in MongoDB) ──
-    private String parentId;
+    private String parentUserId; // SINGLE POINT OF TRUTH (Uxx)
+    
+    // ── Transient fields for UI/Logic (Not stored in students collection) ──
     private String parentName;
     private String parentPhone;
     private String parentOccupation;
-    private String parentRelation = "Father"; // default
+    private String parentRelation = "Father";
+    private Parent parent; 
 
     // Default Constructor
     public Student() {
@@ -111,6 +111,14 @@ public class Student extends User {
         this.pincode = pincode;
     }
 
+    public String getParentUserId() {
+        return parentUserId;
+    }
+
+    public void setParentUserId(String parentUserId) {
+        this.parentUserId = parentUserId;
+    }
+
     public Parent getParent() {
         return parent;
     }
@@ -118,11 +126,6 @@ public class Student extends User {
     public void setParent(Parent parent) {
         this.parent = parent;
     }
-
-    // ── Flat parent getters/setters ──
-
-    public String getParentId() { return parentId; }
-    public void setParentId(String parentId) { this.parentId = parentId; }
 
     public String getParentName() { return parentName != null ? parentName : "N/A"; }
     public void setParentName(String parentName) { this.parentName = parentName; }

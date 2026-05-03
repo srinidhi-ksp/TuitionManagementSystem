@@ -18,7 +18,8 @@ javac -encoding UTF-8 -source 17 -target 17 -d bin -cp "%CLASSPATH%" ^
   src\ui\admin\*.java ^
   src\ui\parent\*.java ^
   src\ui\student\*.java ^
-  src\ui\teacher\*.java
+  src\ui\teacher\*.java ^
+  src\ui\common\*.java
 
 if errorlevel 1 (
   echo.

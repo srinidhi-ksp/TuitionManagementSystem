@@ -5,7 +5,6 @@ import java.util.List;
 
 import org.bson.Document;
 
-import model.Parent;
 import model.Student;
 import model.Teacher;
 import model.User;
@@ -104,25 +103,8 @@ public class DocumentMapper {
         s.setCity(city);
         s.setStreet(doc.getString("street"));
 
-        // ── Nested Parent: build both the Parent object AND the flat fields ──
-        Document pDoc = (Document) doc.get("parent");
-        if (pDoc != null) {
-            // Full Parent object (kept for backward compat)
-            Parent parent = new Parent();
-            parent.setUserId(pDoc.getString("parent_id"));
-            parent.setName(pDoc.getString("full_name"));
-            parent.setEmergencyContact(parsePhoneToLong(pDoc.getString("phone")));
-            parent.setOccupation(pDoc.getString("occupation"));
-            s.setParent(parent);
-
-            // ✅ Flat parent fields (SINGLE SOURCE OF TRUTH)
-            s.setParentId(pDoc.getString("parent_id"));
-            s.setParentName(pDoc.getString("full_name"));
-            s.setParentPhone(pDoc.getString("phone"));
-            s.setParentOccupation(pDoc.getString("occupation"));
-            // relation is not stored in embedded doc — default to "Father"
-            s.setParentRelation("Father");
-        }
+        // ✅ Link to Parent using parent_user_id (Uxx)
+        s.setParentUserId(doc.getString("parent_user_id"));
 
         return s;
     }
@@ -149,14 +131,9 @@ public class DocumentMapper {
         if (student.getPhone() != null) doc.append("phone", student.getPhone());
         else doc.append("phone", "9999999999"); // Fallback for data integrity
 
-        if (student.getParent() != null) {
-            Parent p = student.getParent();
-            Document pDoc = new Document();
-            pDoc.append("parent_id",  p.getUserId());
-            pDoc.append("full_name",  p.getName());
-            pDoc.append("phone",      String.valueOf(p.getEmergencyContact()));
-            pDoc.append("occupation", p.getOccupation());
-            doc.append("parent", pDoc);
+        // ✅ Persist Parent Link
+        if (student.getParentUserId() != null) {
+            doc.append("parent_user_id", student.getParentUserId());
         }
 
         return doc;
@@ -349,17 +326,74 @@ public class DocumentMapper {
         b.setStartTime(doc.getDate("start_time"));
         b.setEndTime(doc.getDate("end_time"));
 
-        // ── try schedule sub-document (some DB records use this) ──
-        Document schedule = (Document) doc.get("schedule");
-        if (schedule != null) {
-            // schedule.start_time / schedule.end_time may be strings like "09:00"
-            Object ss = schedule.get("start_time");
-            Object se = schedule.get("end_time");
-            String sStr = ss != null ? ss.toString() : null;
-            String eStr = se != null ? se.toString() : null;
-            if (b.getTiming() == null && sStr != null && eStr != null) {
-                b.setTiming(sStr + " - " + eStr);
+        // ── try schedule ARRAY (new requirement) ──
+        Object scheduleObj = doc.get("schedule");
+        if (scheduleObj instanceof java.util.List) {
+            java.util.List<?> scheduleList = (java.util.List<?>) scheduleObj;
+            java.util.List<model.Schedule> schedules = new java.util.ArrayList<>();
+            for (Object item : scheduleList) {
+                String day = null;
+                String start = null;
+                String end = null;
+
+                if (item instanceof Document) {
+                    Document sDoc = (Document) item;
+                    day = sDoc.getString("day");
+                    start = sDoc.getString("start");
+                    end = sDoc.getString("end");
+                    if (start == null) start = sDoc.getString("start_time");
+                    if (end == null) end = sDoc.getString("end_time");
+                } else if (item instanceof java.util.Map) {
+                    java.util.Map<?, ?> map = (java.util.Map<?, ?>) item;
+                    Object dayObj = map.get("day");
+                    Object startObj = map.get("start");
+                    Object endObj = map.get("end");
+                    if (startObj == null) startObj = map.get("start_time");
+                    if (endObj == null) endObj = map.get("end_time");
+                    day = dayObj != null ? dayObj.toString() : null;
+                    start = startObj != null ? startObj.toString() : null;
+                    end = endObj != null ? endObj.toString() : null;
+                } else if (item instanceof java.util.List) {
+                    java.util.List<?> inner = (java.util.List<?>) item;
+                    if (inner.size() >= 3) {
+                        day = inner.get(0) != null ? inner.get(0).toString() : null;
+                        start = inner.get(1) != null ? inner.get(1).toString() : null;
+                        end = inner.get(2) != null ? inner.get(2).toString() : null;
+                    }
+                }
+
+                if (day != null || start != null || end != null) {
+                    model.Schedule sc = new model.Schedule();
+                    sc.setDay(day);
+                    sc.setStart(start);
+                    sc.setEnd(end);
+                    schedules.add(sc);
+                }
             }
+            b.setSchedules(schedules);
+            
+            // If timing is null, derive it from the first schedule entry
+            if (b.getTiming() == null && !schedules.isEmpty()) {
+                model.Schedule s = schedules.get(0);
+                b.setTiming(s.getDay() + " " + s.getStart() + " - " + s.getEnd());
+            }
+        } else if (scheduleObj instanceof Document) {
+            // Legacy single document support
+            Document schedule = (Document) scheduleObj;
+            String sStr = schedule.getString("start_time");
+            if (sStr == null) sStr = schedule.getString("start");
+            String eStr = schedule.getString("end_time");
+            if (eStr == null) eStr = schedule.getString("end");
+            String day = schedule.getString("day");
+            
+            if (b.getTiming() == null && sStr != null && eStr != null) {
+                b.setTiming((day != null ? day + " " : "") + sStr + " - " + eStr);
+            }
+            
+            // Still populate the list for consistency
+            java.util.List<model.Schedule> schedules = new java.util.ArrayList<>();
+            schedules.add(new model.Schedule(day, sStr, eStr));
+            b.setSchedules(schedules);
         }
 
         // ── If timing still null, derive from Date start/end ──
@@ -401,6 +435,20 @@ public class DocumentMapper {
         doc.append("category",    batch.getCategory());
         doc.append("standard",    batch.getStandard());
         doc.append("status",      batch.getStatus() != null ? batch.getStatus() : "ACTIVE");
+        
+        // Persist schedule list if present
+        if (batch.getSchedules() != null && !batch.getSchedules().isEmpty()) {
+            java.util.List<Document> sDocs = new java.util.ArrayList<>();
+            for (model.Schedule s : batch.getSchedules()) {
+                Document sDoc = new Document();
+                sDoc.append("day", s.getDay());
+                sDoc.append("start", s.getStart());
+                sDoc.append("end", s.getEnd());
+                sDocs.add(sDoc);
+            }
+            doc.append("schedule", sDocs);
+        }
+
         // Persist timing string to DB for direct retrieval
         if (batch.getTiming() != null) {
             doc.append("timing", batch.getTiming());
@@ -543,6 +591,14 @@ public class DocumentMapper {
         if (feeObj instanceof Number) p.setFeeId(((Number) feeObj).intValue());
         else if (feeObj != null) try { p.setFeeId(Integer.parseInt(feeObj.toString())); } catch (Exception ex) {}
         
+        Object batchObj = doc.get("batch_id");
+        if (batchObj instanceof Number) p.setBatchId(((Number) batchObj).intValue());
+        else if (batchObj != null) try { p.setBatchId(Integer.parseInt(batchObj.toString())); } catch (Exception ex) {}
+        
+        p.setMonthStr(doc.getString("month"));
+        p.setStatus(doc.getString("status"));
+        p.setStudentId(doc.getString("student_id"));
+        
         Object amountObj = doc.get("amount_paid");
         if (amountObj instanceof Number) p.setAmountPaid(((Number) amountObj).doubleValue());
         
@@ -559,6 +615,10 @@ public class DocumentMapper {
         Document doc = new Document();
         doc.append("_id", p.getPaymentId());
         doc.append("fee_id", p.getFeeId());
+        doc.append("batch_id", p.getBatchId());
+        doc.append("student_id", p.getStudentId());
+        doc.append("month", p.getMonthStr());
+        doc.append("status", p.getStatus() != null ? p.getStatus() : "PAID");
         doc.append("amount_paid", p.getAmountPaid());
         doc.append("payment_date", p.getPaymentDate());
         doc.append("payment_mode", p.getPaymentMode());
@@ -603,6 +663,8 @@ public class DocumentMapper {
         doc.append("test_name", test.getTestName());
         doc.append("test_date", test.getTestDate());
         doc.append("max_marks", test.getMaxMarks());
+        doc.append("total_marks", test.getMaxMarks());
+        doc.append("attempts", test.getAttempts() != null ? test.getAttempts() : new ArrayList<Document>());
         return doc;
     }
 
@@ -691,8 +753,13 @@ public class DocumentMapper {
         if (doc == null) return null;
         model.Parent p = new model.Parent();
         
+        // ✅ Strictly use user_id (matches users._id)
         p.setUserId(doc.getString("user_id"));
         if (p.getUserId() == null) p.setUserId(doc.getString("_id"));
+        
+        p.setName(doc.getString("name"));
+        p.setEmail(doc.getString("email"));
+        p.setPhone(doc.getString("phone"));
         
         p.setPreferredLanguage(doc.getString("preferred_language"));
         p.setOccupation(doc.getString("occupation"));
@@ -706,24 +773,24 @@ public class DocumentMapper {
         else if (emergencyObj != null) try { p.setEmergencyContact(Long.parseLong(emergencyObj.toString())); } catch (Exception ex) {}
         
         p.setRelationType(doc.getString("relation_type"));
-        p.setName(doc.getString("name"));
-        
-        List<String> studentIds = doc.getList("linked_student_ids", String.class);
-        if (studentIds != null) p.setLinkedStudentIds(studentIds);
         
         return p;
     }
 
     public static Document parentToDocument(model.Parent p) {
         Document doc = new Document();
+        // ✅ Strictly use user_id
         doc.append("user_id", p.getUserId());
+        doc.append("name", p.getName());
+        doc.append("email", p.getEmail());
+        doc.append("phone", p.getPhone());
+        
         doc.append("preferred_language", p.getPreferredLanguage());
         doc.append("occupation", p.getOccupation());
         doc.append("annual_income", p.getAnnualIncome());
         doc.append("emergency_contact", p.getEmergencyContact());
         doc.append("relation_type", p.getRelationType());
-        if (p.getName() != null) doc.append("name", p.getName());
-        if (p.getLinkedStudentIds() != null) doc.append("linked_student_ids", p.getLinkedStudentIds());
+        
         return doc;
     }
 

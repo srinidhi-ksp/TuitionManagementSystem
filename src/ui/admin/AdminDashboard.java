@@ -88,6 +88,8 @@ public class AdminDashboard extends JFrame {
         mainContentPanel.add(new EnrollmentManagementFrame(), "Enrollment");
         mainContentPanel.add(new AttendanceManagementFrame(), "Attendance");
         mainContentPanel.add(new FeesManagementPanel(),       "Fees & Payments");
+        mainContentPanel.add(new SalaryManagementPanel(),     "Salary Management");
+        mainContentPanel.add(new ui.common.TimetablePanel("ADMIN", null), "Timetable");
         mainContentPanel.add(new SettingsFrame(),             "Settings");
 
         add(createTopNavbar(),  BorderLayout.NORTH);
@@ -242,6 +244,8 @@ public class AdminDashboard extends JFrame {
         addSidebarItem("📝", "Enrollment");
         addSidebarItem("📊", "Attendance");
         addSidebarItem("💰", "Fees & Payments");
+        addSidebarItem("💵", "Salary Management");
+        addSidebarItem("📅", "Timetable");
 
         sidebarPanel.add(Box.createVerticalStrut(10));
         

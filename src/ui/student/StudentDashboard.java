@@ -35,7 +35,9 @@ public class StudentDashboard extends JFrame {
         mainContentPanel.add(new MyBatchesPanel(), "My Batches");
         mainContentPanel.add(new SyllabusProgressPanel(), "Syllabus Progress");
         mainContentPanel.add(new AttendancePanel(), "Attendance");
+        mainContentPanel.add(new StudentMarksPanel(), "Test Results");
         mainContentPanel.add(new FeesPanel(), "Fees & Payments");
+        mainContentPanel.add(new ui.common.TimetablePanel("STUDENT", user.getUserId()), "Timetable");
         mainContentPanel.add(new ProfilePanel(), "Profile");
 
         add(createTopNavbar(), BorderLayout.NORTH);
@@ -157,9 +159,9 @@ public class StudentDashboard extends JFrame {
 
         String[] menuItems = {
             "Dashboard", "My Subjects", "My Batches", "Syllabus Progress", 
-            "Attendance", "Fees & Payments", "Profile"
+            "Attendance", "Test Results", "Fees & Payments", "Timetable", "Profile"
         };
-        String[] icons = {"🏠", "📚", "📋", "📈", "📊", "💰", "👤"};
+        String[] icons = {"🏠", "📚", "📋", "📈", "📊", "📈", "💰", "📅", "👤"};
 
         for (int i = 0; i < menuItems.length; i++) {
             final String item = menuItems[i];

@@ -98,21 +98,25 @@ public class ParentProfilePanel extends JPanel {
         dao.ParentDAO pDAO = new dao.ParentDAO();
         Parent p = pDAO.getByUserId(pId);
 
-        JLabel name = new JLabel(p != null ? p.getName() : "Parent User");
-        name.setFont(new Font("SansSerif", Font.BOLD, 20));
-        name.setForeground(ThemeManager.TEXT);
-        
-        JLabel email = new JLabel("📧 " + (p != null ? p.getEmail() : "N/A"));
-        email.setFont(new Font("SansSerif", Font.PLAIN, 14));
-        email.setForeground(ThemeManager.SUB_TEXT);
-        
-        JLabel phone = new JLabel("📞 " + (p != null && p.getPhone() != null ? p.getPhone() : "Not Provided"));
-        phone.setFont(new Font("SansSerif", Font.PLAIN, 14));
-        phone.setForeground(ThemeManager.SUB_TEXT);
+        String pName = (p != null && p.getName() != null) ? p.getName() : "Parent User";
+        String pEmail = (p != null && p.getEmail() != null) ? p.getEmail() : "Not Available";
+        String pPhone = (p != null && p.getPhone() != null) ? p.getPhone() : "Not Available";
 
-        info.add(name);
-        info.add(email);
-        info.add(phone);
+        JLabel nameLabel = new JLabel(pName);
+        nameLabel.setFont(new Font("SansSerif", Font.BOLD, 22));
+        nameLabel.setForeground(ThemeManager.TEXT);
+        
+        JLabel emailLabel = new JLabel("📧  " + pEmail);
+        emailLabel.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        emailLabel.setForeground(ThemeManager.SUB_TEXT);
+        
+        JLabel phoneLabel = new JLabel("📞  " + pPhone);
+        phoneLabel.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        phoneLabel.setForeground(ThemeManager.SUB_TEXT);
+
+        info.add(nameLabel);
+        info.add(emailLabel);
+        info.add(phoneLabel);
         
         card.add(info, BorderLayout.CENTER);
         return card;
@@ -121,10 +125,22 @@ public class ParentProfilePanel extends JPanel {
     private void loadInitialData() {
         linkedStudents = portalService.getLinkedStudents(SessionManager.getInstance().getUserId());
         studentProfilesContainer.removeAll();
-        for (Student s : linkedStudents) {
-            studentProfilesContainer.add(createStudentItem(s));
-            studentProfilesContainer.add(Box.createVerticalStrut(15));
+        
+        if (linkedStudents == null || linkedStudents.isEmpty()) {
+            JLabel emptyLabel = new JLabel("No students linked to this account");
+            emptyLabel.setFont(new Font("SansSerif", Font.ITALIC, 14));
+            emptyLabel.setForeground(ThemeManager.SUB_TEXT);
+            emptyLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+            studentProfilesContainer.add(Box.createVerticalGlue());
+            studentProfilesContainer.add(emptyLabel);
+            studentProfilesContainer.add(Box.createVerticalGlue());
+        } else {
+            for (Student s : linkedStudents) {
+                studentProfilesContainer.add(createStudentItem(s));
+                studentProfilesContainer.add(Box.createVerticalStrut(15));
+            }
         }
+        
         studentProfilesContainer.revalidate();
         studentProfilesContainer.repaint();
     }
@@ -136,31 +152,36 @@ public class ParentProfilePanel extends JPanel {
             BorderFactory.createLineBorder(ThemeManager.DIVIDER, 1, true),
             new EmptyBorder(20, 25, 20, 25)
         ));
-        p.setMaximumSize(new Dimension(Integer.MAX_VALUE, 100));
+        p.setMaximumSize(new Dimension(Integer.MAX_VALUE, 120));
 
-        JPanel text = new JPanel(new GridLayout(2, 2, 10, 5));
+        JPanel text = new JPanel(new GridLayout(2, 3, 15, 8));
         text.setOpaque(false);
         
-        JLabel name = new JLabel(s.getName());
+        JLabel name = new JLabel(s.getName() != null ? s.getName() : "Student");
         name.setFont(new Font("SansSerif", Font.BOLD, 16));
         name.setForeground(ThemeManager.TEXT);
         
-        JLabel sid = new JLabel("ID: " + s.getUserId());
+        JLabel sid = new JLabel("🆔 ID: " + (s.getUserId() != null ? s.getUserId() : "N/A"));
         sid.setFont(new Font("SansSerif", Font.PLAIN, 13));
         sid.setForeground(ThemeManager.SUB_TEXT);
         
-        JLabel std = new JLabel("Standard: " + s.getCurrentStd());
+        JLabel std = new JLabel("📚 Standard: " + (s.getCurrentStd() != null ? s.getCurrentStd() : "N/A"));
         std.setFont(new Font("SansSerif", Font.PLAIN, 13));
         std.setForeground(ThemeManager.SUB_TEXT);
         
-        JLabel board = new JLabel("Board: " + (s.getBoard() != null ? s.getBoard() : "N/A"));
+        JLabel board = new JLabel("🏫 Board: " + (s.getBoard() != null ? s.getBoard() : "Not Available"));
         board.setFont(new Font("SansSerif", Font.PLAIN, 13));
         board.setForeground(ThemeManager.SUB_TEXT);
+
+        JLabel city = new JLabel("📍 City: " + (s.getCity() != null ? s.getCity() : "Not Available"));
+        city.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        city.setForeground(ThemeManager.SUB_TEXT);
 
         text.add(name);
         text.add(sid);
         text.add(std);
         text.add(board);
+        text.add(city);
         
         p.add(text, BorderLayout.CENTER);
         return p;

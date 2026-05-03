@@ -100,9 +100,16 @@ public class FeeService {
                     Subject subject = subjectDAO.getSubjectById(batch.getSubjectId());
                     
                     if (subject != null) {
-                        // Check payment status in payments collection
-                        boolean isPaid = paymentDAO.isSubjectPaid(studentId, String.valueOf(subject.getSubjectId()));
-                        String status = isPaid ? "PAID" : "UNPAID";
+                        // Use current month for payment check (e.g., "2026-05")
+                        String currentMonth = new java.text.SimpleDateFormat("yyyy-MM").format(new java.util.Date());
+                        
+                        // Check payment status in payments collection for this SPECIFIC batch
+                        model.Payment p = paymentDAO.getPaymentForBatch(studentId, batch.getBatchId(), currentMonth);
+                        
+                        String status = "UNPAID";
+                        if (p != null) {
+                            status = (p.getStatus() != null) ? p.getStatus().toUpperCase() : "PAID";
+                        }
                         
                         // Use "Subject Name (Batch Name)" for clear identification
                         String displayName = subject.getSubjectName() + " (" + batch.getBatchName() + ")";
@@ -155,7 +162,7 @@ public class FeeService {
 
         for (SubjectFeeDTO fee : feeDetails) {
             totalFee += fee.getMonthlyFee();
-            if ("PAID".equals(fee.getPaymentStatus())) {
+            if ("PAID".equalsIgnoreCase(fee.getPaymentStatus())) {
                 paidAmount += fee.getMonthlyFee();
                 paidSubjects++;
             }
@@ -170,7 +177,15 @@ public class FeeService {
         } else if (paidSubjects > 0) {
             overallStatus = "PARTIAL";
         } else {
-            overallStatus = "UNPAID";
+            // Check if any are PENDING (meaning orange in UI)
+            boolean hasPending = false;
+            for (SubjectFeeDTO fee : feeDetails) {
+                if ("PENDING".equalsIgnoreCase(fee.getPaymentStatus())) {
+                    hasPending = true;
+                    break;
+                }
+            }
+            overallStatus = hasPending ? "PENDING" : "UNPAID";
         }
 
         summary.put("totalFee", totalFee);
@@ -188,30 +203,39 @@ public class FeeService {
     }
 
     /**
-     * Record a payment for a subject
+     * Record a payment for a specific batch
      */
-    public boolean recordPayment(String inputId, String subjectId, String paymentMode) {
+    public boolean recordPayment(String inputId, int batchId, String paymentMode) {
         String studentId = resolveStudentId(inputId);
         System.out.println("\n[FeeService] Recording payment - Student: " + studentId + 
-                         " | Subject: " + subjectId + " | Mode: " + paymentMode);
+                         " | Batch ID: " + batchId + " | Mode: " + paymentMode);
         
         try {
-            // Get subject fee
-            int subjectIdInt = Integer.parseInt(subjectId);
-            Subject subject = subjectDAO.getSubjectById(subjectIdInt);
+            // Get batch and subject details
+            Batch batch = batchDAO.getBatchById(batchId);
+            if (batch == null) {
+                System.err.println("[FeeService] Batch not found: " + batchId);
+                return false;
+            }
+
+            Subject subject = subjectDAO.getSubjectById(batch.getSubjectId());
             if (subject == null) {
-                System.err.println("[FeeService] Subject not found: " + subjectId);
+                System.err.println("[FeeService] Subject not found for batch: " + batchId);
                 return false;
             }
 
             // Create payment record
             Payment payment = new Payment();
             payment.setStudentId(studentId);
-            payment.setSubjectId(subjectId);
+            payment.setBatchId(batchId);
             payment.setAmountPaid(subject.getMonthlyFee());
             payment.setPaymentMode(paymentMode);
             payment.setPaymentDate(new Date());
-            payment.setMonth(Calendar.getInstance().get(Calendar.MONTH) + 1);
+            
+            // Set month string (e.g., "2026-05")
+            String currentMonth = new java.text.SimpleDateFormat("yyyy-MM").format(new java.util.Date());
+            payment.setMonthStr(currentMonth);
+            payment.setStatus("PAID");
 
             // Insert into database
             boolean success = paymentDAO.insertPayment(payment);
@@ -254,9 +278,9 @@ public class FeeService {
      * Generate a receipt object for a paid subject.
      * Maps Student ID, Batch, Subject, and Payment details.
      */
-    public model.Receipt generateReceipt(String inputId, String subjectId) {
+    public model.Receipt generateReceipt(String inputId, int batchId) {
         String studentId = resolveStudentId(inputId);
-        System.out.println("[FeeService] Generating receipt for Student: " + studentId + ", Subject: " + subjectId);
+        System.out.println("[FeeService] Generating receipt for Student: " + studentId + ", Batch: " + batchId);
         
         try {
             // 1. Get Student Details
@@ -267,31 +291,28 @@ public class FeeService {
             String className = (student != null) ? student.getCurrentStd() : "N/A";
 
             // 2. Get Payment Details
-            model.Payment payment = paymentDAO.getPayment(studentId, subjectId);
+            model.Payment payment = paymentDAO.getPayment(studentId, batchId);
             if (payment == null) {
-                System.err.println("[FeeService] ❌ No payment found for Student: " + studentId + ", Subject: " + subjectId);
+                System.err.println("[FeeService] ❌ No payment found for Student: " + studentId + ", Batch: " + batchId);
                 return null;
             }
 
-            // 3. Get Subject Details
-            model.Subject subject = subjectDAO.getSubjectById(Integer.parseInt(subjectId));
-            String subjectName = (subject != null) ? subject.getSubjectName() : "N/A";
-            double amount = (subject != null) ? subject.getMonthlyFee() : payment.getAmountPaid();
-
-            // 4. Get Batch Details
-            String batchName = "N/A";
-            List<model.Enrollment> enrollments = enrollmentDAO.getEnrollmentsByStudentId(studentId);
-            if (enrollments != null) {
-                for (model.Enrollment e : enrollments) {
-                    model.Batch b = batchDAO.getBatchById(e.getBatchId());
-                    if (b != null && String.valueOf(b.getSubjectId()).equals(subjectId)) {
-                        batchName = b.getBatchName();
-                        break;
-                    }
+            // 3. Get Batch and Subject Details
+            model.Batch batch = batchDAO.getBatchById(batchId);
+            String batchName = (batch != null) ? batch.getBatchName() : "N/A";
+            
+            String subjectName = "N/A";
+            double amount = payment.getAmountPaid();
+            
+            if (batch != null) {
+                model.Subject subject = subjectDAO.getSubjectById(batch.getSubjectId());
+                if (subject != null) {
+                    subjectName = subject.getSubjectName();
+                    amount = subject.getMonthlyFee();
                 }
             }
 
-            // 5. Format Date
+            // 4. Format Date
             String paymentDate = "N/A";
             if (payment.getPaymentDate() != null) {
                 java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd-MMM-yyyy");

@@ -16,6 +16,8 @@ public class Batch {
     private String category; // e.g. "Class 12", "Class 11"
     private String standard; // e.g. "8", "12" — dedicated field for EXACT matching
     private String status = "ACTIVE"; // "ACTIVE" or "INACTIVE"
+    private java.util.List<Schedule> schedules;
+
 
     // Default Constructor
     public Batch() {
@@ -124,10 +126,16 @@ public class Batch {
         this.timing = timing;
     }
 
+    public java.util.List<Schedule> getSchedules() {
+        return schedules;
+    }
+
+    public void setSchedules(java.util.List<Schedule> schedules) {
+        this.schedules = schedules;
+    }
+
     @Override
     public String toString() {
-        String classNameSafe = (category != null) ? category : "";
-        return batchId + " - " + (batchName != null ? batchName : "") +
-               (classNameSafe.isEmpty() ? "" : " (" + classNameSafe + ")");
+        return (batchName != null ? batchName : "") + " (" + batchId + ")";
     }
 }

@@ -14,6 +14,11 @@ public class Payment {
     private String studentId;
     private String subjectId;
     private int month;
+    
+    // New fields for batch-wise tracking
+    private int batchId;
+    private String monthStr; // "YYYY-MM" format
+    private String status; // "PAID" or "UNPAID"
 
     public int getPaymentId() { return paymentId; }
     public void setPaymentId(int paymentId) { this.paymentId = paymentId; }
@@ -42,4 +47,13 @@ public class Payment {
     
     public int getMonth() { return month; }
     public void setMonth(int month) { this.month = month; }
+
+    public int getBatchId() { return batchId; }
+    public void setBatchId(int batchId) { this.batchId = batchId; }
+    
+    public String getMonthStr() { return monthStr; }
+    public void setMonthStr(String monthStr) { this.monthStr = monthStr; }
+    
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 }

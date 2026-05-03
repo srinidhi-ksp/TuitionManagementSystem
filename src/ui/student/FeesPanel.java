@@ -241,10 +241,11 @@ public class FeesPanel extends JPanel {
             button.addActionListener(e -> {
                 row = feesTable.getEditingRow();
                 if (row == -1) return;
-                subjectId = (String) tableModel.getValueAt(row, 4);
+                String batchIdStr = (String) tableModel.getValueAt(row, 4);
+                int batchId = Integer.parseInt(batchIdStr);
                 String studentId = SessionManager.getInstance().getUserId();
                 
-                model.Receipt receipt = feeService.generateReceipt(studentId, subjectId);
+                model.Receipt receipt = feeService.generateReceipt(studentId, batchId);
                 if (receipt != null) {
                     new ReceiptDialog((Frame) SwingUtilities.getWindowAncestor(FeesPanel.this), receipt).setVisible(true);
                 } else {
@@ -327,7 +328,7 @@ public class FeesPanel extends JPanel {
                                 String.format("₹%.2f", f.getMonthlyFee()), 
                                 f.getPaymentStatus(),
                                 "Generate Receipt",
-                                f.getSubjectId()
+                                String.valueOf(f.getBatchId())  // Store batchId as string for table
                             });
                         }
                     } else {

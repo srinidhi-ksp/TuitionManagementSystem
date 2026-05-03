@@ -68,30 +68,6 @@ public class ParentDAO {
     }
 
     /**
-     * Link a student to a parent
-     */
-    public boolean linkStudent(String parentId, String studentId) {
-        if (parentCollection == null) return false;
-        try {
-            Parent p = getByUserId(parentId);
-            if (p != null) {
-                List<String> studentIds = p.getLinkedStudentIds();
-                if (studentIds == null) studentIds = new ArrayList<>();
-                if (!studentIds.contains(studentId)) {
-                    studentIds.add(studentId);
-                    parentCollection.updateOne(
-                        Filters.eq("user_id", parentId),
-                        new Document("$set", new Document("linked_student_ids", studentIds))
-                    );
-                    return true;
-                }
-            }
-        } catch (Exception e) {
-            System.err.println("[ParentDAO] Error linking student: " + e.getMessage());
-        }
-        return false;
-    }
-    /**
      * Add a new parent record
      */
     public boolean addParent(Parent p) {
@@ -104,5 +80,18 @@ public class ParentDAO {
             System.err.println("[ParentDAO] Error adding parent: " + e.getMessage());
             return false;
         }
+    }
+
+    public List<Parent> getAllParents() {
+        List<Parent> list = new ArrayList<>();
+        if (parentCollection == null) return list;
+        try {
+            for (Document doc : parentCollection.find()) {
+                list.add(DocumentMapper.documentToParent(doc));
+            }
+        } catch (Exception e) {
+            System.err.println("[ParentDAO] Error fetching all parents: " + e.getMessage());
+        }
+        return list;
     }
 }

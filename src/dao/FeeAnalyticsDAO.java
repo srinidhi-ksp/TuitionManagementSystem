@@ -79,7 +79,7 @@ public class FeeAnalyticsDAO {
                             if (batches.length() > 0) batches.append(", ");
                             batches.append(b.getBatchName());
                             
-                            if (!paymentDao.isSubjectPaid(s.getUserId(), String.valueOf(b.getSubjectId()))) {
+                            if (!paymentDao.isBatchPaid(s.getUserId(), b.getBatchId())) {
                                 allPaid = false;
                             }
                         }

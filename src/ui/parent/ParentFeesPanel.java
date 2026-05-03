@@ -1,17 +1,46 @@
 package ui.parent;
 
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.GridBagLayout;
+import java.awt.GridLayout;
 import java.io.File;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
-import javax.swing.*;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JDialog;
+import javax.swing.JFileChooser;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JTextField;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.border.EmptyBorder;
 
 import model.Payment;
 import model.Student;
 import model.SubjectFeeDTO;
+import java.awt.image.BufferedImage;
+import javax.swing.ImageIcon;
+import javax.imageio.ImageIO;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+
 import service.FeeService;
 import service.PDFReportService;
 import service.ParentPortalService;
@@ -211,23 +240,95 @@ public class ParentFeesPanel extends JPanel {
         content.setOpaque(false);
 
         if ("UPI".equals(type)) {
-            JLabel qrLbl = new JLabel("Scan QR Code to Pay", SwingConstants.CENTER);
-            qrLbl.setFont(new Font("SansSerif", Font.PLAIN, 14));
-            content.add(qrLbl, BorderLayout.NORTH);
+            p.setBackground(new Color(250, 251, 254)); // Light bluish background
             
-            JPanel qr = new JPanel() {
-                @Override protected void paintComponent(Graphics g) {
-                    super.paintComponent(g);
-                    g.setColor(Color.BLACK);
-                    for(int i=0; i<15; i++) {
-                        for(int j=0; j<15; j++) {
-                            if((i*j+i+j)%4 == 0) g.fillRect(i*10+45, j*10+20, 10, 10);
-                        }
-                    }
+            JLabel upiHeader = new JLabel("UPI PAYMENT", SwingConstants.CENTER);
+            upiHeader.setFont(new Font("SansSerif", Font.BOLD, 18));
+            upiHeader.setForeground(new Color(30, 41, 59));
+            p.add(upiHeader, BorderLayout.NORTH);
+
+            JPanel upiContent = new JPanel(new GridLayout(1, 2, 20, 0));
+            upiContent.setOpaque(false);
+
+            // Left Side: QR Code
+            JPanel qrSide = new JPanel(new BorderLayout(0, 10));
+            qrSide.setOpaque(false);
+            qrSide.setBorder(BorderFactory.createEmptyBorder(10, 0, 10, 0));
+
+            JLabel qrImgLabel = new JLabel();
+            qrImgLabel.setHorizontalAlignment(SwingConstants.CENTER);
+            try {
+                String upiString = "upi://pay?pa=tuition@upi&pn=MRK Tuition&am=" + toPay.getMonthlyFee() + "&cu=INR";
+                String encoded = URLEncoder.encode(upiString, StandardCharsets.UTF_8.toString());
+                String apiUrl = "https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=" + encoded;
+                
+                // Fetch image from API
+                BufferedImage image = ImageIO.read(new URL(apiUrl));
+                if (image != null) {
+                    qrImgLabel.setIcon(new ImageIcon(image));
+                } else {
+                    qrImgLabel.setText("QR API Offline");
                 }
-            };
-            qr.setPreferredSize(new Dimension(200, 200));
-            content.add(qr, BorderLayout.CENTER);
+            } catch (Exception e) {
+                qrImgLabel.setText("QR Generation Failed");
+                System.err.println("[ParentFeesPanel] QR Error: " + e.getMessage());
+            }
+            qrImgLabel.setPreferredSize(new Dimension(180, 180));
+            qrImgLabel.setOpaque(true);
+            qrImgLabel.setBackground(Color.WHITE);
+            qrImgLabel.setBorder(BorderFactory.createLineBorder(new Color(220, 220, 220)));
+
+            JLabel amountLabel = new JLabel("Rs. " + toPay.getMonthlyFee(), SwingConstants.CENTER);
+            amountLabel.setFont(new Font("SansSerif", Font.BOLD, 16));
+            
+            JLabel upiIdLabel = new JLabel("UPI ID: tuition@upi", SwingConstants.CENTER);
+            upiIdLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
+            upiIdLabel.setForeground(Color.GRAY);
+
+            qrSide.add(qrImgLabel, BorderLayout.CENTER);
+            JPanel qrText = new JPanel(new GridLayout(2, 1));
+            qrText.setOpaque(false);
+            qrText.add(amountLabel);
+            qrText.add(upiIdLabel);
+            qrSide.add(qrText, BorderLayout.SOUTH);
+
+            // Right Side: UPI Apps & ID Input
+            JPanel inputSide = new JPanel();
+            inputSide.setLayout(new BoxLayout(inputSide, BoxLayout.Y_AXIS));
+            inputSide.setOpaque(false);
+
+            JLabel appsLabel = new JLabel("Pay using UPI Apps");
+            appsLabel.setFont(new Font("SansSerif", Font.BOLD, 14));
+            appsLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+            inputSide.add(appsLabel);
+            inputSide.add(Box.createVerticalStrut(10));
+
+            JPanel iconsRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+            iconsRow.setOpaque(false);
+            iconsRow.add(new JLabel("GPay"));
+            iconsRow.add(new JLabel("PhonePe"));
+            iconsRow.add(new JLabel("Paytm"));
+            iconsRow.add(new JLabel("BHIM"));
+            iconsRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+            inputSide.add(iconsRow);
+            inputSide.add(Box.createVerticalStrut(20));
+
+            JLabel enterLabel = new JLabel("Enter UPI ID");
+            enterLabel.setFont(new Font("SansSerif", Font.PLAIN, 13));
+            enterLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+            inputSide.add(enterLabel);
+            
+            JTextField upiInput = new JTextField("yourname@upi");
+            upiInput.setPreferredSize(new Dimension(200, 35));
+            upiInput.setMaximumSize(new Dimension(200, 35));
+            upiInput.setAlignmentX(Component.LEFT_ALIGNMENT);
+            inputSide.add(Box.createVerticalStrut(5));
+            inputSide.add(upiInput);
+            
+            upiContent.add(qrSide);
+            upiContent.add(inputSide);
+            content.add(upiContent, BorderLayout.CENTER);
+
         } else if ("CARD".equals(type)) {
             JPanel cardForm = new JPanel(new GridLayout(4, 1, 0, 15));
             cardForm.setOpaque(false);
@@ -242,11 +343,11 @@ public class ParentFeesPanel extends JPanel {
             content.add(msg, BorderLayout.CENTER);
         }
 
-        JButton payBtn = new JButton("Confirm Payment");
+        JButton payBtn = new JButton("VERIFY AND PAY");
         payBtn.setFont(new Font("SansSerif", Font.BOLD, 15));
         payBtn.setBackground(new Color(59, 130, 246));
         payBtn.setForeground(Color.WHITE);
-        payBtn.setPreferredSize(new Dimension(0, 45));
+        payBtn.setPreferredSize(new Dimension(0, 50));
         
         final SubjectFeeDTO target = toPay;
         payBtn.addActionListener(e -> {
@@ -254,7 +355,7 @@ public class ParentFeesPanel extends JPanel {
             payBtn.setEnabled(false);
             
             Timer t = new Timer(1500, ex -> {
-                boolean success = feeService.recordPayment(currentStudent.getUserId(), target.getSubjectId(), type);
+                boolean success = feeService.recordPayment(currentStudent.getUserId(), target.getBatchId(), type);
                 if (success) {
                     dialog.dispose();
                     JOptionPane.showMessageDialog(this, "🎉 Payment Successful for " + target.getSubjectName(), "Success", JOptionPane.INFORMATION_MESSAGE);

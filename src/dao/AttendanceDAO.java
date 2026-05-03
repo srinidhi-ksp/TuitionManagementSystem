@@ -220,6 +220,19 @@ public class AttendanceDAO {
                 doc,
                 new ReplaceOptions().upsert(true)
             );
+
+            // 🔥 TRIGGER SALARY UPDATE
+            try {
+                String[] parts = dateStr.split("-");
+                if (parts.length == 3) {
+                    int year = Integer.parseInt(parts[0]);
+                    int month = Integer.parseInt(parts[1]);
+                    new service.SalaryService().calculateSalary(teacherId, month, year);
+                }
+            } catch (Exception ex) {
+                System.err.println("[AttendanceDAO] Trigger Error: " + ex.getMessage());
+            }
+
             return true;
         } catch (Exception e) {
             e.printStackTrace();

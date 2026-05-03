@@ -4,15 +4,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.bson.Document;
+
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
 
-import model.Test;
-import model.Mark;
 import db.DBConnection;
 import db.DocumentMapper;
+import model.Mark;
+import model.Test;
 
 public class TestsDAO {
 
@@ -99,37 +100,139 @@ public class TestsDAO {
         }
         return tests;
     }
+    /**
+     * CORRECT AGGREGATION: Get all marks for a student with full details
+     * 
+     * Pipeline:
+     * 1. $unwind attempts to explode the array
+     * 2. $match student_id AND EVALUATED status AND score NOT null
+     * 3. $lookup batches to get subject_id
+     * 4. $lookup subjects to get subject name
+     * 5. $project final fields with percentage calculation
+     * 6. $sort by test_date descending
+     */
     public List<model.TestMark> getStudentMarks(String studentId) {
         List<model.TestMark> testMarks = new ArrayList<>();
-        if (marksCollection == null) return testMarks;
+        if (testsCollection == null) {
+            System.err.println("[TestsDAO] Tests collection is null!");
+            return testMarks;
+        }
+
+        if (studentId == null || studentId.trim().isEmpty()) {
+            System.err.println("[TestsDAO] Student ID is null or empty!");
+            return testMarks;
+        }
 
         try {
-            // Find all marks for the student
-            com.mongodb.client.MongoCursor<Document> cursor = marksCollection.find(com.mongodb.client.model.Filters.eq("user_id", studentId)).iterator();
-            while (cursor.hasNext()) {
-                Document markDoc = cursor.next();
+            System.out.println("[TestsDAO] ⏳ Fetching marks for student: " + studentId);
+
+            List<org.bson.conversions.Bson> pipeline = java.util.Arrays.asList(
+                // STEP 1: Unwind attempts array to get individual attempts
+                new Document("$unwind", "$attempts"),
                 
-                // For each mark, find the test details
-                Integer testId = markDoc.getInteger("test_id");
-                if (testId != null) {
-                    Document testDoc = testsCollection.find(com.mongodb.client.model.Filters.eq("test_id", testId)).first();
-                    
-                    if (testDoc != null) {
-                        model.TestMark tm = new model.TestMark();
-                        tm.setMarkId(markDoc.getInteger("mark_id"));
-                        tm.setTestId(testId);
-                        tm.setTestName(testDoc.getString("test_name"));
-                        tm.setSubjectName(testDoc.getString("subject_name"));
-                        tm.setMaxMarks(testDoc.getInteger("max_marks"));
-                        tm.setMarksObtained(markDoc.getInteger("marks_obtained"));
-                        tm.setTestDate(testDoc.getDate("test_date"));
-                        testMarks.add(tm);
-                    }
+                // STEP 2: Match student_id, EVALUATED status, and non-null scores
+                new Document("$match", new Document()
+                    .append("attempts.student_id", studentId)
+                    .append("attempts.status", "EVALUATED")
+                    .append("attempts.score", new Document("$ne", null))),
+                
+                // STEP 3: Join with batches to get subject_id
+                new Document("$lookup", new Document()
+                    .append("from", "batches")
+                    .append("localField", "batch_id")
+                    .append("foreignField", "_id")
+                    .append("as", "batch")),
+                new Document("$unwind", new Document()
+                    .append("path", "$batch")
+                    .append("preserveNullAndEmptyArrays", false)),
+                
+                // STEP 4: Join with subjects to get subject name
+                new Document("$lookup", new Document()
+                    .append("from", "subjects")
+                    .append("localField", "batch.subject_id")
+                    .append("foreignField", "_id")
+                    .append("as", "subject")),
+                new Document("$unwind", new Document()
+                    .append("path", "$subject")
+                    .append("preserveNullAndEmptyArrays", false)),
+                
+                // STEP 5: Project final fields with calculations
+                new Document("$project", new Document()
+                    .append("test_name", 1)
+                    .append("test_date", 1)
+                    .append("total_marks", new Document("$cond", 
+                        new Document("if", new Document("$ne", java.util.Arrays.asList(
+                            new Document("$type", "$total_marks"), "null")))
+                            .append("then", "$total_marks")
+                            .append("else", 100)))
+                    .append("marks_obtained", "$attempts.score")
+                    .append("subject_name", "$subject.name")
+                    .append("percentage", new Document("$multiply", java.util.Arrays.asList(
+                        new Document("$divide", java.util.Arrays.asList("$attempts.score", 100)),
+                        100)))),
+                
+                // STEP 6: Sort by test_date descending
+                new Document("$sort", new Document("test_date", -1))
+            );
+
+            MongoCursor<Document> cursor = testsCollection.aggregate(pipeline).iterator();
+            int count = 0;
+            
+            while (cursor.hasNext()) {
+                Document doc = cursor.next();
+                count++;
+                
+                model.TestMark tm = new model.TestMark();
+                
+                // Extract fields
+                tm.setTestName(doc.getString("test_name"));
+                tm.setTestDate(doc.getDate("test_date"));
+                
+                // Handle total_marks: use default 100 if null
+                int max = doc.getInteger("total_marks", 100);
+                Integer obtained = doc.getInteger("marks_obtained");
+                
+                // ⚠️ SKIP if obtained is null (prevent NullPointerException)
+                if (obtained == null) {
+                    System.out.println("[TestsDAO]   ⚠️  Skipping: Null score for test: " + tm.getTestName());
+                    continue;
                 }
+                
+                tm.setMaxMarks(max);
+                tm.setMarksObtained(obtained);
+                
+                // Subject name with fallback
+                String subject = doc.getString("subject_name");
+                tm.setSubjectName(subject != null ? subject : "General");
+                
+                // Calculate percentage and grade
+                double percentage = max > 0 ? (obtained * 100.0 / max) : 0;
+                tm.setPercentage(percentage);
+                tm.setGrade(calculateGrade(percentage));
+                
+                testMarks.add(tm);
+                System.out.println("[TestsDAO]   ✔ Added: " + tm.getTestName() + " - " + obtained + "/" + max);
             }
+            
+            System.out.println("[TestsDAO] ✅ Successfully fetched " + count + " marks for student: " + studentId);
+            
         } catch (Exception e) {
+            System.err.println("[TestsDAO] ❌ Aggregation Error: " + e.getMessage());
             e.printStackTrace();
         }
+        
         return testMarks;
+    }
+
+    /**
+     * Calculate grade based on percentage
+     * A+: 90+, A: 80+, B: 70+, C: 60+, D: < 60
+     */
+    private String calculateGrade(double percentage) {
+        if (percentage >= 90) return "A+";
+        if (percentage >= 80) return "A";
+        if (percentage >= 70) return "B";
+        if (percentage >= 60) return "C";
+        return "D";
     }
 }

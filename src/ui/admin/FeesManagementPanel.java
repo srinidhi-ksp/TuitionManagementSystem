@@ -28,6 +28,7 @@ public class FeesManagementPanel extends JPanel {
     private static final Color COLOR_ACCENT  = new Color(59, 130, 246);
     private static final Color COLOR_SUCCESS = new Color(34, 197, 94);
     private static final Color COLOR_ERROR   = new Color(239, 68, 68);
+    private static final Color COLOR_PENDING = new Color(245, 158, 11); // Orange-600
 
     private FeeService feeService;
     private StudentDAO studentDAO;
@@ -191,8 +192,10 @@ public class FeesManagementPanel extends JPanel {
                 setBorder(new EmptyBorder(0, 15, 0, 0));
                 
                 if (c == 3) { // Status column
-                    if ("PAID".equals(value)) setForeground(COLOR_SUCCESS);
-                    else if ("UNPAID".equals(value)) setForeground(COLOR_ERROR);
+                    String status = String.valueOf(value).toUpperCase();
+                    if (status.equals("PAID")) setForeground(COLOR_SUCCESS);
+                    else if (status.equals("UNPAID")) setForeground(COLOR_ERROR);
+                    else if (status.equals("PENDING")) setForeground(COLOR_PENDING);
                     else setForeground(ThemeManager.SUB_TEXT);
                     setFont(getFont().deriveFont(Font.BOLD));
                 }
@@ -319,8 +322,11 @@ public class FeesManagementPanel extends JPanel {
                 setBorder(new EmptyBorder(0, 15, 0, 0));
                 
                 if (c == 2) {
-                    if ("PAID".equals(value)) setForeground(COLOR_SUCCESS);
-                    else setForeground(COLOR_ERROR);
+                    String status = String.valueOf(value).toUpperCase();
+                    if (status.equals("PAID")) setForeground(COLOR_SUCCESS);
+                    else if (status.equals("UNPAID")) setForeground(COLOR_ERROR);
+                    else if (status.equals("PENDING")) setForeground(COLOR_PENDING);
+                    else setForeground(ThemeManager.SUB_TEXT);
                     setFont(getFont().deriveFont(Font.BOLD));
                 }
                 return comp;
@@ -358,7 +364,11 @@ public class FeesManagementPanel extends JPanel {
         
         String status = (String) summary.get("status");
         statusCard.setText(status);
-        statusCard.setForeground("PAID".equals(status) ? COLOR_SUCCESS : COLOR_ERROR);
+        
+        if ("PAID".equals(status)) statusCard.setForeground(COLOR_SUCCESS);
+        else if ("PENDING".equals(status)) statusCard.setForeground(COLOR_PENDING);
+        else if ("PARTIAL".equals(status)) statusCard.setForeground(COLOR_ACCENT);
+        else statusCard.setForeground(COLOR_ERROR);
 
         if ("NO_ENROLLMENT".equals(status)) {
             managementModel.addRow(new Object[]{"NO ENROLLMENT FOUND", "--", "--", "--"});

@@ -137,7 +137,8 @@ public class ParentMarksPanel extends JPanel {
 
         if (currentMarks == null || currentMarks.isEmpty()) {
             g2.setColor(ThemeManager.SUB_TEXT);
-            g2.drawString("No data available for chart", w/2 - 60, h/2);
+            g2.setFont(new Font("SansSerif", Font.ITALIC, 14));
+            g2.drawString("Student has not attended any evaluated tests", w/2 - 140, h/2);
             return;
         }
 
@@ -218,16 +219,24 @@ public class ParentMarksPanel extends JPanel {
     private void loadMarks() {
         model.setRowCount(0);
         currentMarks = portalService.getDetailedMarks(currentStudent.getUserId());
+        
+        if (currentMarks.isEmpty()) {
+            model.addRow(new Object[]{"—", "Student has not attended any evaluated tests", "—", "—", "—", "—"});
+            chartPanel.repaint();
+            return;
+        }
+
         for (TestMark m : currentMarks) {
             model.addRow(new Object[]{
                 m.getSubjectName(),
                 m.getTestName(),
                 m.getMarksObtained(),
                 m.getMaxMarks(),
-                calculateGrade(m.getMarksObtained(), m.getMaxMarks()),
+                m.getGrade() != null ? m.getGrade() : calculateGrade(m.getMarksObtained(), m.getMaxMarks()),
                 m.getTestDate() != null ? new java.text.SimpleDateFormat("dd-MM-yyyy").format(m.getTestDate()) : "—"
             });
         }
+        chartPanel.repaint();
     }
 
     private String calculateGrade(int o, int m) {

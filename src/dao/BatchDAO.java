@@ -221,4 +221,35 @@ public class BatchDAO {
         System.out.println("[BatchDAO] Filtered Batches Found: " + list.size());
         return list;
     }
+    public List<Batch> getBatchesByTeacher(String teacherId) {
+        return getBatchesByTeacherId(teacherId);
+    }
+
+    public List<Batch> getBatchesByStudentEnrollment(String studentId) {
+        List<Batch> list = new ArrayList<>();
+        if (batchCollection == null) return list;
+
+        try {
+            EnrollmentDAO enrollmentDAO = new EnrollmentDAO();
+            List<model.Enrollment> enrollments = enrollmentDAO.getEnrollmentsByStudentId(studentId);
+            List<Integer> batchIds = new ArrayList<>();
+            for (model.Enrollment e : enrollments) {
+                if ("ACTIVE".equalsIgnoreCase(e.getStatus())) {
+                    batchIds.add(e.getBatchId());
+                }
+            }
+
+            if (batchIds.isEmpty()) return list;
+
+            try (MongoCursor<Document> cursor = batchCollection.find(Filters.in("_id", batchIds)).iterator()) {
+                while (cursor.hasNext()) {
+                    Batch b = DocumentMapper.documentToBatch(cursor.next());
+                    if (b != null) list.add(b);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
 }

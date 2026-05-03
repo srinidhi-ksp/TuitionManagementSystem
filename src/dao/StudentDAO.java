@@ -209,6 +209,25 @@ public class StudentDAO {
         return studentList;
     }
 
+    /**
+     * ✅ Fetch all students linked to a specific parent (by users._id)
+     */
+    public List<Student> getStudentsByParentUserId(String parentUserId) {
+        List<Student> studentList = new ArrayList<>();
+        if (studentCollection == null || parentUserId == null) return studentList;
+
+        try (MongoCursor<Document> cursor = studentCollection.find(Filters.eq("parent_user_id", parentUserId)).iterator()) {
+            while (cursor.hasNext()) {
+                Document doc = cursor.next();
+                Student s = DocumentMapper.documentToStudent(doc);
+                if (s != null) studentList.add(s);
+            }
+        } catch (Exception e) {
+            System.err.println("[StudentDAO] Error fetching students by parent_user_id: " + e.getMessage());
+        }
+        return studentList;
+    }
+
     // ══════════════════════════════════════════════════
     // NEW: Active/Inactive detection via enrollments
     // ══════════════════════════════════════════════════

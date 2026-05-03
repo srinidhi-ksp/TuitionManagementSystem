@@ -167,20 +167,28 @@ public class ParentManagementFrame extends JPanel {
     private void refreshTable() {
         tableModel.setRowCount(0);
 
-        // ✅ SINGLE SOURCE OF TRUTH: students collection, embedded parent
-        allStudents = new StudentDAO().getAllStudents();
+        // ✅ NEW ARCHITECTURE: Load from parents collection
+        List<model.Parent> parents = new dao.ParentDAO().getAllParents();
+        dao.StudentDAO studentDAO = new dao.StudentDAO();
 
         int loaded = 0;
-        for (Student s : allStudents) {
-            // Only add rows where parent data exists
-            if (s.getParentName() == null || "N/A".equals(s.getParentName())) continue;
+        for (model.Parent p : parents) {
+            // Fetch students linked to this parent
+            List<Student> students = studentDAO.getStudentsByParentUserId(p.getUserId());
+            
+            String studentDisplay = students.isEmpty() ? "No students linked" : "";
+            for (int i = 0; i < students.size(); i++) {
+                Student s = students.get(i);
+                studentDisplay += s.getName() + " (" + s.getUserId() + ")";
+                if (i < students.size() - 1) studentDisplay += ", ";
+            }
 
             tableModel.addRow(new Object[]{
-                s.getParentName(),
-                s.getName() + " (" + s.getUserId() + ")",
-                s.getParentRelation(),
-                s.getParentPhone(),
-                s.getParentOccupation()
+                p.getName(),
+                studentDisplay,
+                p.getRelationType() != null ? p.getRelationType() : "N/A",
+                p.getPhone(),
+                p.getOccupation()
             });
             loaded++;
         }

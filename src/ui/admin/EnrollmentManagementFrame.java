@@ -1,19 +1,47 @@
 package ui.admin;
 
-import javax.swing.*;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.Frame;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.GridBagLayout;
+import java.awt.GridLayout;
+import java.awt.RenderingHints;
+import java.text.SimpleDateFormat;
+import java.util.List;
+
+import javax.swing.BorderFactory;
+import javax.swing.DefaultListCellRenderer;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JComponent;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTabbedPane;
+import javax.swing.JTable;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableCellRenderer;
-import java.awt.*;
-import java.text.SimpleDateFormat;
-import java.util.List;
+
+import dao.BatchDAO;
 import dao.EnrollmentDAO;
 import dao.StudentDAO;
-import dao.BatchDAO;
+import model.Batch;
 import model.Enrollment;
 import model.Student;
-import model.Batch;
 
 /**
  * Enrollment Management Module
@@ -274,7 +302,7 @@ public class EnrollmentManagementFrame extends JPanel {
         String title = isEditMode ? "Edit Enrollment" : "Enroll Student";
 
         JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), title, true);
-        dialog.setSize(500, 500);
+        dialog.setSize(550, 620);
         dialog.setLocationRelativeTo(this);
         dialog.getContentPane().setBackground(CARD_BG);
         dialog.setLayout(new BorderLayout());
@@ -290,11 +318,31 @@ public class EnrollmentManagementFrame extends JPanel {
             studentCombo.addItem(s.getUserId() + " – " + (s.getName() != null ? s.getName() : "(unnamed)"));
 
         JComboBox<Batch> batchCombo = new JComboBox<>();
+        batchCombo.addItem(null); // Placeholder option
         for (Batch b : new BatchDAO().getAllBatches())
             batchCombo.addItem(b);
 
+        batchCombo.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                if (value == null) {
+                    setText("Select Batch");
+                    setForeground(TEXT_SEC);
+                }
+                return this;
+            }
+        });
+
         DateChooser dateChooser = new DateChooser();
         JComboBox<String> statusCombo = new JComboBox<>(new String[]{"ACTIVE", "COMPLETED", "CANCELLED"});
+        
+        // Validation feedback labels
+        JLabel validationLabel = new JLabel("");
+        validationLabel.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        
+        JLabel statusDetailsLabel = new JLabel("");
+        statusDetailsLabel.setFont(new Font("SansSerif", Font.PLAIN, 10));
 
         if (isEditMode) {
             for (int i = 0; i < studentCombo.getItemCount(); i++)
@@ -313,23 +361,123 @@ public class EnrollmentManagementFrame extends JPanel {
 
         form.add(makeFormRow("Student", studentCombo));
         form.add(makeFormRow("Batch", batchCombo));
+        form.add(validationLabel);
+        form.add(statusDetailsLabel);
         form.add(makeFormRow("Enrollment Date", dateChooser));
         form.add(makeFormRow("Status", statusCombo));
+
+        // Save button - will be enabled/disabled based on validation
+        JButton saveBtn = new JButton(isEditMode ? "Update Enrollment" : "Save Enrollment");
+        final boolean[] isValid = {true}; // Track validation state
+        
+        // Shared validation logic for student and batch selection
+        Runnable validateSelection = () -> {
+            String selS = studentCombo.getSelectedItem() != null ? studentCombo.getSelectedItem().toString() : "Select Student";
+            Object selectedBatch = batchCombo.getSelectedItem();
+            Batch selB = selectedBatch instanceof Batch ? (Batch) selectedBatch : null;
+
+            validationLabel.setText("");
+            statusDetailsLabel.setText("");
+            isValid[0] = true;
+
+            if (!selS.startsWith("Select") && selB != null) {
+                String studentId = selS.split(" – ")[0].trim();
+
+                // ===== CHECK 1: DUPLICATE ENROLLMENT =====
+                String duplicateStudentName = util.ScheduleConflictValidator.checkDuplicateEnrollment(studentId, selB.getBatchId());
+                if (duplicateStudentName != null) {
+                    validationLabel.setText("❌ Duplicate Enrollment!");
+                    statusDetailsLabel.setText("This student is already enrolled in this batch.");
+                    validationLabel.setForeground(ERROR);
+                    statusDetailsLabel.setForeground(ERROR);
+                    isValid[0] = false;
+                } else {
+                    // ===== CHECK 2: SCHEDULE CONFLICT =====
+                    util.ScheduleConflictValidator.ConflictInfo conflict = util.ScheduleConflictValidator.checkStudentConflict(studentId, selB.getBatchId());
+
+                    if (conflict != null) {
+                        validationLabel.setText("⚠️ Schedule Conflict Detected!");
+                        statusDetailsLabel.setText("Conflicts with: " + conflict.getFormattedMessage());
+                        validationLabel.setForeground(WARNING);
+                        statusDetailsLabel.setForeground(WARNING);
+                        isValid[0] = false;
+                    } else {
+                        validationLabel.setText("✅ No conflicts");
+                        validationLabel.setForeground(SUCCESS);
+                        isValid[0] = true;
+                    }
+                }
+            } else {
+                validationLabel.setText("ℹ️ Select student and batch");
+                validationLabel.setForeground(TEXT_SEC);
+                isValid[0] = false;
+            }
+
+            saveBtn.setEnabled(isValid[0] && !selS.startsWith("Select") && selB != null);
+        };
+
+        // Real-time validation on batch or student selection
+        batchCombo.addActionListener(e -> validateSelection.run());
+        studentCombo.addActionListener(e -> validateSelection.run());
 
         JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 16));
         btnRow.setBackground(PAGE_BG);
         btnRow.add(makeSecondaryButton("Cancel", e -> dialog.dispose()));
-        String btnText = isEditMode ? "Update Enrollment" : "Save Enrollment";
-        btnRow.add(makeAccentButton(btnText, e -> {
+        
+        saveBtn.setBackground(ACCENT);
+        saveBtn.setForeground(Color.WHITE);
+        saveBtn.setFont(new Font("SansSerif", Font.BOLD, 13));
+        saveBtn.setFocusPainted(false);
+        saveBtn.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(ACCENT, 1, true), new EmptyBorder(6, 18, 6, 18)));
+        saveBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        saveBtn.setEnabled(false); // Start disabled
+        
+        saveBtn.addActionListener(e -> {
             try {
                 String selS = studentCombo.getSelectedItem().toString();
                 Batch selB  = (Batch) batchCombo.getSelectedItem();
+                
                 if (selS.startsWith("Select") || selB == null) {
-                    JOptionPane.showMessageDialog(dialog, "Please select a student and batch."); return;
+                    JOptionPane.showMessageDialog(dialog, "Please select a student and batch.", "Incomplete Form", JOptionPane.WARNING_MESSAGE);
+                    return;
                 }
+                
+                String studentId = selS.split(" – ")[0].trim();
+                
+                // ===== FINAL VALIDATION BEFORE SAVE =====
+                String duplicateCheck = util.ScheduleConflictValidator.checkDuplicateEnrollment(studentId, selB.getBatchId());
+                if (duplicateCheck != null && !isEditMode) {
+                    JOptionPane.showMessageDialog(dialog,
+                        "❌ DUPLICATE ENROLLMENT!\n\n" +
+                        "This student is already enrolled in this batch.\n\n" +
+                        "Student: " + duplicateCheck + "\n" +
+                        "Batch: " + selB.getBatchName() + "\n\n" +
+                        "You cannot enroll the same student twice.",
+                        "Duplicate Enrollment Error", JOptionPane.ERROR_MESSAGE);
+                    return; // Stop enrollment
+                }
+                
+                // Check schedule conflict
+                util.ScheduleConflictValidator.ConflictInfo conflict = 
+                    util.ScheduleConflictValidator.checkStudentConflict(studentId, selB.getBatchId());
+                
+                if (conflict != null && !isEditMode) {
+                    JOptionPane.showMessageDialog(dialog,
+                        "⚠️ SCHEDULE CONFLICT DETECTED!\n\n" +
+                        "This student already has another class at this time.\n\n" +
+                        "Conflicting Batch:\n" +
+                        "  Name: " + conflict.batchName + "\n" +
+                        "  Day: " + conflict.day + "\n" +
+                        "  Time: " + conflict.startTime + " – " + conflict.endTime + "\n\n" +
+                        "Please choose a different batch.",
+                        "Schedule Conflict", JOptionPane.WARNING_MESSAGE);
+                    return; // Stop enrollment
+                }
+                
                 Enrollment en = isEditMode ? editTarget : new Enrollment();
                 if (!isEditMode) en.setEnrollmentId((int)(System.currentTimeMillis() % 100000));
-                en.setStudentUserId(selS.split(" – ")[0].trim());
+                en.setStudentUserId(studentId);
                 en.setBatchId(selB.getBatchId());
                 en.setStatus(statusCombo.getSelectedItem().toString());
                 en.setEnrollmentDate(dateChooser.getDate());
@@ -338,16 +486,18 @@ public class EnrollmentManagementFrame extends JPanel {
                     ? new EnrollmentDAO().updateEnrollment(en)
                     : new EnrollmentDAO().addEnrollment(en);
                 if (ok) {
-                    JOptionPane.showMessageDialog(dialog, "Saved successfully!");
+                    JOptionPane.showMessageDialog(dialog, "✅ Enrollment " + (isEditMode ? "updated" : "saved") + " successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
                     refreshAllTabs();
                     dialog.dispose();
                 } else {
-                    JOptionPane.showMessageDialog(dialog, "Failed to save.");
+                    JOptionPane.showMessageDialog(dialog, "❌ Failed to save enrollment.", "Error", JOptionPane.ERROR_MESSAGE);
                 }
             } catch (Exception ex) {
-                JOptionPane.showMessageDialog(dialog, "Error: " + ex.getMessage());
+                JOptionPane.showMessageDialog(dialog, "❌ Error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
-        }));
+        });
+        
+        btnRow.add(saveBtn);
 
         JScrollPane formScroll = new JScrollPane(form);
         formScroll.setBorder(BorderFactory.createEmptyBorder());

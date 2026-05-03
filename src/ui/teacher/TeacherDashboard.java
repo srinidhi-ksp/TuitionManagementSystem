@@ -36,6 +36,7 @@ public class TeacherDashboard extends JFrame {
         mainContentPanel.add(new TestsMarksPanel(user), "Tests & Marks");
         mainContentPanel.add(new SyllabusUpdatePanel(user), "Syllabus Progress");
         mainContentPanel.add(new StudentsListPanel(user), "My Students");
+        mainContentPanel.add(new ui.common.TimetablePanel("TEACHER", user.getUserId()), "Timetable");
         mainContentPanel.add(new ProfilePanel(user), "Profile");
 
         add(createTopNavbar(), BorderLayout.NORTH);
@@ -126,7 +127,7 @@ public class TeacherDashboard extends JFrame {
 
         String[] menuItems = {
             "Dashboard", "My Batches", "Take Attendance", "Tests & Marks", 
-            "Syllabus Progress", "My Students", "Profile"
+            "Syllabus Progress", "My Students", "Timetable", "Profile"
         };
 
         for (String item : menuItems) {
