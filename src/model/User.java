@@ -47,6 +47,10 @@ public class User {
         return userId;
     }
 
+    public String getId() {
+        return userId;
+    }
+
     public void setUserId(String userId) {
         this.userId = userId;
     }

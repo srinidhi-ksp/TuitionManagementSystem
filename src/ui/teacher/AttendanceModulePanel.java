@@ -167,7 +167,7 @@ public class AttendanceModulePanel extends JPanel {
                             model.addRow(new Object[]{ student.getUserId(), student.getName(), status });
                         }
                     } else {
-                        model.addRow(new Object[]{"N/A", "No active students in this batch", "Present"});
+                        model.addRow(new Object[]{"-", "No active students in this batch", "Present"});
                     }
                 } catch (Exception e) {
                     model.setRowCount(0);

@@ -63,11 +63,32 @@ public class SalaryManagementPanel extends JPanel {
         JButton calcBtn = new JButton("Calculate All");
         calcBtn.addActionListener(e -> calculateAll());
 
+        JButton downloadSalaryPDF = new JButton("📥 Download Salary Report PDF");
+        downloadSalaryPDF.setBackground(new Color(59, 130, 246));
+        downloadSalaryPDF.setForeground(Color.WHITE);
+        downloadSalaryPDF.setFont(new Font("SansSerif", Font.BOLD, 13));
+        downloadSalaryPDF.setFocusPainted(false);
+        downloadSalaryPDF.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser();
+            chooser.setSelectedFile(new java.io.File("MRK_Salary_Report_" +
+                new java.text.SimpleDateFormat("MMM_yyyy").format(new java.util.Date()) + ".pdf"));
+            if (chooser.showSaveDialog(null) == JFileChooser.APPROVE_OPTION) {
+                service.SalaryPDFService pdfService = new service.SalaryPDFService();
+                String result = pdfService.generateSalaryReport(chooser.getSelectedFile().getAbsolutePath());
+                if (result != null) {
+                    JOptionPane.showMessageDialog(null, "✅ Salary report saved successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+                } else {
+                    JOptionPane.showMessageDialog(null, "❌ Failed to generate PDF.", "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+
         filters.add(new JLabel("Month:"));
         filters.add(monthCombo);
         filters.add(new JLabel("Year:"));
         filters.add(yearCombo);
         filters.add(calcBtn);
+        filters.add(downloadSalaryPDF);
 
         header.add(title, BorderLayout.WEST);
         header.add(filters, BorderLayout.EAST);

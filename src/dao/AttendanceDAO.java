@@ -229,6 +229,33 @@ public class AttendanceDAO {
                     new ReplaceOptions().upsert(true)
                 );
             }
+            // TRIGGER LOW ATTENDANCE NOTIFICATIONS
+            new Thread(() -> {
+                try {
+                    MongoDatabase db = DBConnection.getDatabase();
+                    if (db == null) return;
+                    for (String studentId : studentStatuses.keySet()) {
+                        double percent = getAttendancePercentage(studentId);
+                        if (percent < 75.0) {
+                            Document studentDoc = db.getCollection("students").find(Filters.eq("_id", studentId)).first();
+                            if (studentDoc != null) {
+                                String parentId = studentDoc.getString("parent_user_id");
+                                if (parentId == null) {
+                                    Document parentEmbed = (Document) studentDoc.get("parent");
+                                    parentId = parentEmbed != null ? parentEmbed.getString("parent_id") : null;
+                                }
+                                String studentName = studentDoc.getString("full_name");
+                                if (parentId != null) {
+                                    new service.NotificationService().notifyLowAttendance(parentId, studentId, studentName, percent);
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception ex) {
+                    System.err.println("[AttendanceDAO] Trigger Error: " + ex.getMessage());
+                }
+            }).start();
+            
             return true;
         } catch (Exception e) {
             e.printStackTrace();

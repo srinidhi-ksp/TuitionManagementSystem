@@ -233,7 +233,7 @@ public class TestsMarksPanel extends JPanel {
                     currentRows = get();
                     marksModel.setRowCount(0);
                     if (currentRows.isEmpty()) {
-                        marksModel.addRow(new Object[]{"N/A", "No active students", ""});
+                        marksModel.addRow(new Object[]{"-", "No active students", ""});
                         return;
                     }
                     for (TeacherPortalService.MarkRow row : currentRows) {

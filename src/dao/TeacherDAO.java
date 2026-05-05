@@ -42,20 +42,44 @@ public class TeacherDAO {
         return false;
     }
 
-    public Teacher getTeacherById(String userId) {
-        if (teacherCollection == null) return null;
-        try {
-            Document doc = teacherCollection.find(
-                Filters.or(
-                    Filters.eq("_id", userId),
-                    Filters.eq("user_id", userId)
-                )
-            ).first();
-            return DocumentMapper.documentToTeacher(doc);
-        } catch (Exception e) {
-            e.printStackTrace();
+    public Teacher getTeacherById(String teacherId) {
+        com.mongodb.client.MongoDatabase database = db.DBConnection.getDatabase();
+        MongoCollection<Document> col = database.getCollection("teachers");
+
+        Document doc = col.find(Filters.eq("_id", teacherId)).first();
+
+        if (doc == null) return null;
+
+        Teacher t = new Teacher();
+
+        t.setUserId(doc.getString("_id"));
+        t.setName(doc.getString("name"));
+        if (t.getName() == null) t.setName(doc.getString("full_name"));
+        t.setEmail(doc.getString("email"));
+        t.setCity(doc.getString("city"));
+
+        Date joinDate = doc.getDate("join_date");
+
+        if (joinDate != null) {
+            t.setJoinDate(new java.text.SimpleDateFormat("dd-MM-yyyy").format(joinDate));
+        } else {
+            t.setJoinDate("-");
         }
-        return null;
+
+        Object salObj = doc.get("salary");
+        if (salObj instanceof Number) t.setSalary(((Number) salObj).doubleValue());
+        else t.setSalary(0);
+
+        Object expObj = doc.get("experience_years");
+        if (expObj instanceof Number) t.setExperience(((Number) expObj).intValue());
+        else t.setExperience(0);
+
+        return t;
+    }
+
+    public Document getTeacherExtraDetails(String teacherId) {
+        if (teacherCollection == null) return null;
+        return teacherCollection.find(Filters.eq("_id", teacherId)).first();
     }
 
     public boolean deleteTeacher(String userId) {
@@ -105,7 +129,11 @@ public class TeacherDAO {
         if (joinDate == null) {
             joinDate = userDAO.getCreatedAt(t.getUserId());
         }
-        t.setJoinDate(joinDate);
+        if (joinDate != null) {
+            t.setJoinDate(new java.text.SimpleDateFormat("dd-MM-yyyy").format(joinDate));
+        } else {
+            t.setJoinDate("-");
+        }
     }
 
     public List<Teacher> getAllTeachers() {
@@ -155,11 +183,8 @@ public class TeacherDAO {
     public Teacher getByUserId(String userId) {
         if (teacherCollection == null || userId == null) return null;
         try {
-            Document doc = teacherCollection.find(Filters.eq("user_id", userId)).first();
-            if (doc == null) {
-                doc = teacherCollection.find(Filters.eq("_id", userId)).first();
-            }
-            return DocumentMapper.documentToTeacher(doc);
+            // Use getTeacherById as it has robust mapping logic
+            return getTeacherById(userId);
         } catch (Exception e) {
             e.printStackTrace();
         }

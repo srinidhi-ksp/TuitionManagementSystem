@@ -586,6 +586,15 @@ public class StudentManagementFrame extends JPanel {
             if (emgField.getText().trim().length() != 10) {
                 emgErr.setText("10 digits required"); ok = false;
             } else emgErr.setText("");
+            // ── Mandatory: occupation and annual income ──
+            if (occField.getText().trim().isEmpty()) {
+                JOptionPane.showMessageDialog(dialog, "Occupation is required.", "Validation Error", JOptionPane.WARNING_MESSAGE);
+                ok = false;
+            }
+            if (incField.getText().trim().isEmpty() || Double.parseDouble(incField.getText().trim().isEmpty() ? "0" : incField.getText().trim()) <= 0) {
+                JOptionPane.showMessageDialog(dialog, "Annual Income is required and must be > 0.", "Validation Error", JOptionPane.WARNING_MESSAGE);
+                ok = false;
+            }
             if (!ok) return;
 
             try {

@@ -127,13 +127,13 @@ public class Student extends User {
         this.parent = parent;
     }
 
-    public String getParentName() { return parentName != null ? parentName : "N/A"; }
+    public String getParentName() { return parentName != null ? parentName : "-"; }
     public void setParentName(String parentName) { this.parentName = parentName; }
 
-    public String getParentPhone() { return parentPhone != null ? parentPhone : "N/A"; }
+    public String getParentPhone() { return parentPhone != null ? parentPhone : "-"; }
     public void setParentPhone(String parentPhone) { this.parentPhone = parentPhone; }
 
-    public String getParentOccupation() { return parentOccupation != null ? parentOccupation : "N/A"; }
+    public String getParentOccupation() { return parentOccupation != null ? parentOccupation : "-"; }
     public void setParentOccupation(String parentOccupation) { this.parentOccupation = parentOccupation; }
 
     public String getParentRelation() { return parentRelation != null ? parentRelation : "Father"; }

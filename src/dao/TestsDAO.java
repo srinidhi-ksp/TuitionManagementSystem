@@ -175,6 +175,7 @@ public class TestsDAO {
                     .append("date", new java.util.Date());
                 testsCollection.updateOne(Filters.eq("_id", testId), Updates.push("attempts", attempt));
             }
+            triggerMarksUpdatedNotification(testId, studentId, score);
             return true;
         } catch (Exception e) {
             e.printStackTrace();
@@ -358,5 +359,38 @@ public class TestsDAO {
         if (percentage >= 70) return "B";
         if (percentage >= 60) return "C";
         return "D";
+    }
+
+    private void triggerMarksUpdatedNotification(int testId, String studentId, int score) {
+        new Thread(() -> {
+            try {
+                MongoDatabase db = DBConnection.getDatabase();
+                if (db == null) return;
+                
+                Document testDoc = testsCollection.find(Filters.eq("_id", testId)).first();
+                if (testDoc == null) return;
+                
+                String testName = testDoc.getString("test_name");
+                int totalMarks = testDoc.getInteger("total_marks", 100);
+                
+                Document studentDoc = db.getCollection("students").find(Filters.eq("_id", studentId)).first();
+                if (studentDoc != null) {
+                    String parentId = studentDoc.getString("parent_user_id");
+                    if (parentId == null) {
+                        Document parentEmbed = (Document) studentDoc.get("parent");
+                        parentId = parentEmbed != null ? parentEmbed.getString("parent_id") : null;
+                    }
+                    String studentName = studentDoc.getString("full_name");
+                    
+                    if (parentId != null) {
+                        new service.NotificationService().notifyMarksUpdated(
+                            parentId, studentId, studentName, testName, score, totalMarks
+                        );
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("[TestsDAO] Error triggering notification: " + e.getMessage());
+            }
+        }).start();
     }
 }

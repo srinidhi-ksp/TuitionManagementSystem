@@ -139,6 +139,53 @@ public class StudentDAO {
         return null;
     }
 
+    /**
+     * ✅ FIX: Fetch Student + Enrollment + Batch info
+     */
+    public Student getStudentFullDetails(String studentId) {
+        MongoDatabase db = DBConnection.getDatabase();
+        MongoCollection<Document> studentCol = db.getCollection("students");
+        MongoCollection<Document> enrollCol = db.getCollection("enrollments");
+        MongoCollection<Document> batchCol = db.getCollection("batches");
+
+        Document studentDoc = studentCol.find(Filters.eq("_id", studentId)).first();
+        if (studentDoc == null) {
+            studentDoc = studentCol.find(Filters.eq("user_id", studentId)).first();
+        }
+
+        if (studentDoc == null) return null;
+
+        Student s = DocumentMapper.documentToStudent(studentDoc);
+
+        // ✅ ENROLLMENT JOIN
+        Document enrollDoc = enrollCol.find(Filters.or(
+            Filters.eq("student_id", studentId),
+            Filters.eq("student_user_id", studentId),
+            Filters.eq("user_id", studentId)
+        )).first();
+
+        if (enrollDoc != null) {
+            s.setJoinDate(enrollDoc.getDate("enroll_date"));
+
+            Object bIdObj = enrollDoc.get("batch_id");
+            if (bIdObj != null) {
+                Bson batchFilter;
+                if (bIdObj instanceof Integer) {
+                    batchFilter = Filters.eq("_id", (Integer) bIdObj);
+                } else {
+                    batchFilter = Filters.eq("_id", bIdObj.toString());
+                }
+
+                Document batchDoc = batchCol.find(batchFilter).first();
+                if (batchDoc != null) {
+                    s.setCurrentStd(batchDoc.getString("standard"));
+                    s.setBoard(batchDoc.getString("board"));
+                }
+            }
+        }
+        return s;
+    }
+
 
     public boolean deleteStudent(String userId) {
         if (studentCollection == null) return false;

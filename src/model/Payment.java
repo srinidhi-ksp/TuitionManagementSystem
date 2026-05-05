@@ -38,6 +38,9 @@ public class Payment {
     public String getReceiptNo() { return receiptNo; }
     public void setReceiptNo(String receiptNo) { this.receiptNo = receiptNo; }
     
+    public String getMethod() { return paymentMode; }
+    public void setMethod(String method) { this.paymentMode = method; }
+    
     // New getters/setters
     public String getStudentId() { return studentId; }
     public void setStudentId(String studentId) { this.studentId = studentId; }

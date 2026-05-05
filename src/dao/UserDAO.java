@@ -72,15 +72,24 @@ public class UserDAO {
             // Step 2: Print fetched data to confirm retrieval
             System.out.println("[UserDAO.login] ✅ User document found!");
             System.out.println("[UserDAO.login] 📄 Document Details:");
-            System.out.println("  User ID (_id): " + doc.getString("_id"));
-            System.out.println("  Email: " + doc.getString("email"));
-            System.out.println("  Stored Password length: " + (doc.getString("password") != null ? doc.getString("password").length() : "null"));
-            System.out.println("  Status: " + doc.getString("status"));
+            
+            Object idObj = doc.get("_id");
+            System.out.println("  User ID (_id): " + (idObj != null ? idObj.toString() : "null"));
+            
+            Object emailObj = doc.get("email");
+            System.out.println("  Email: " + (emailObj != null ? emailObj.toString() : "null"));
+            
+            Object passObj = doc.get("password");
+            System.out.println("  Stored Password length: " + (passObj != null ? passObj.toString().length() : "null"));
+            
+            Object statusObj = doc.get("status");
+            System.out.println("  Status: " + (statusObj != null ? statusObj.toString() : "null"));
+            
             System.out.println("  Roles: " + doc.getList("roles", String.class));
             System.out.println("  Created At: " + doc.getDate("created_at"));
             
             // Step 3: Validate password (exact string match for plain text)
-            String storedPassword = doc.getString("password");
+            String storedPassword = passObj != null ? passObj.toString() : null;
             
             if (storedPassword == null) {
                 System.err.println("[UserDAO.login] ❌ Stored password is NULL in database!");

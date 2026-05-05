@@ -6,7 +6,7 @@ setlocal enabledelayedexpansion
 set "CLASSPATH=lib\*"
 
 echo Compiling all Java files with UTF-8 encoding...
-javac -encoding UTF-8 -source 17 -target 17 -d bin -cp "%CLASSPATH%" ^
+javac -encoding UTF-8 --release 17 -d bin -cp "%CLASSPATH%" ^
   src\LaunchLoginUI.java ^
   src\LaunchAdminDashboard.java ^
   src\dao\*.java ^

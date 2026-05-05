@@ -28,7 +28,6 @@ public class ParentOverviewPanel extends JPanel {
     private JPanel cardsPanel;
     private List<Student> linkedStudents;
     private Student currentStudent;
-    private JPanel notificationPanel;
     private JPanel activityPanel;
 
     public ParentOverviewPanel() {
@@ -77,23 +76,11 @@ public class ParentOverviewPanel extends JPanel {
         cardsPanel.setBackground(ThemeManager.BG);
         center.add(cardsPanel, BorderLayout.NORTH);
 
-        // 2. Main Content Area (Notifications + Activity)
-        JPanel mainGrid = new JPanel(new GridLayout(1, 2, 30, 0));
-        mainGrid.setBackground(ThemeManager.BG);
-
-        // Left Column: Notifications
-        notificationPanel = new JPanel();
-        notificationPanel.setLayout(new BoxLayout(notificationPanel, BoxLayout.Y_AXIS));
-        notificationPanel.setBackground(ThemeManager.BG);
-        mainGrid.add(createSection("🔔 Notifications", notificationPanel));
-
-        // Right Column: Recent Activity
+        // 2. Main Content Area (Recent Activity)
         activityPanel = new JPanel();
         activityPanel.setLayout(new BoxLayout(activityPanel, BoxLayout.Y_AXIS));
         activityPanel.setBackground(ThemeManager.BG);
-        mainGrid.add(createSection("🕒 Recent Activity", activityPanel));
-
-        center.add(mainGrid, BorderLayout.CENTER);
+        center.add(createSection("🕒 Recent Activity", activityPanel), BorderLayout.CENTER);
         add(center, BorderLayout.CENTER);
     }
 
@@ -134,7 +121,6 @@ public class ParentOverviewPanel extends JPanel {
         if (idx >= 0 && idx < linkedStudents.size()) {
             currentStudent = linkedStudents.get(idx);
             refreshStats();
-            refreshNotifications();
             refreshActivity();
         }
     }
@@ -144,31 +130,21 @@ public class ParentOverviewPanel extends JPanel {
         cardsPanel.removeAll();
 
         cardsPanel.add(createStatCard("STUDENT NAME", currentStudent.getName().split(" ")[0], "👤", ACCENT));
-        cardsPanel.add(createStatCard("STD / BATCH", currentStudent.getCurrentStd() + " / " + (currentStudent.getBoard() != null ? currentStudent.getBoard() : "N/A"), "🎓", SUCCESS));
-        cardsPanel.add(createStatCard("ATTENDANCE", String.format("%.1f%%", stats.get("attendancePercent")), "🗓️", WARNING));
+        cardsPanel.add(createStatCard("STD / BATCH", currentStudent.getCurrentStd() + " / " + (currentStudent.getBoard() != null ? currentStudent.getBoard() : "-"), "🎓", SUCCESS));
+        Object attObj = stats.get("attendancePercent");
+        double attVal = (attObj instanceof Number) ? ((Number) attObj).doubleValue() : 0.0;
+        cardsPanel.add(createStatCard("ATTENDANCE", String.format("%.1f%%", attVal), "🗓️", WARNING));
         
         Map<String, Object> fees = (Map<String, Object>) stats.get("fees");
-        double pending = (double) fees.get("pendingAmount");
+        Object pendingObj = fees.get("pendingAmount");
+        double pending = (pendingObj instanceof Number) ? ((Number) pendingObj).doubleValue() : 0.0;
         cardsPanel.add(createStatCard("PENDING FEES", String.format("₹%.0f", pending), "💰", pending > 0 ? ERROR : SUCCESS));
 
         cardsPanel.revalidate();
         cardsPanel.repaint();
     }
 
-    private void refreshNotifications() {
-        notificationPanel.removeAll();
-        List<String> notes = portalService.getNotifications(currentStudent.getUserId());
-        if (notes.isEmpty()) {
-            notificationPanel.add(createEmptyState("No new notifications"));
-        } else {
-            for (String note : notes) {
-                notificationPanel.add(createNotificationItem(note));
-                notificationPanel.add(Box.createVerticalStrut(10));
-            }
-        }
-        notificationPanel.revalidate();
-        notificationPanel.repaint();
-    }
+
 
     private void refreshActivity() {
         activityPanel.removeAll();
@@ -185,19 +161,7 @@ public class ParentOverviewPanel extends JPanel {
         activityPanel.repaint();
     }
 
-    private JPanel createNotificationItem(String text) {
-        JPanel p = new JPanel(new BorderLayout(15, 0));
-        p.setBackground(ThemeManager.CARD);
-        p.setBorder(new EmptyBorder(15, 20, 15, 20));
-        p.setMaximumSize(new Dimension(Integer.MAX_VALUE, 70));
-        
-        JLabel lbl = new JLabel("<html><body style='width: 250px'>" + text + "</body></html>");
-        lbl.setFont(new Font("SansSerif", Font.PLAIN, 13));
-        lbl.setForeground(ThemeManager.TEXT);
-        p.add(lbl, BorderLayout.CENTER);
-        
-        return p;
-    }
+
 
     private JPanel createActivityItem(Map<String, String> act) {
         JPanel p = new JPanel(new BorderLayout(15, 0));
@@ -261,7 +225,13 @@ public class ParentOverviewPanel extends JPanel {
         JPanel valRow = new JPanel(new BorderLayout());
         valRow.setOpaque(false);
         JLabel valLbl = new JLabel(value);
-        valLbl.setFont(new Font("SansSerif", Font.BOLD, 22));
+        if (value.length() > 15) {
+            valLbl.setFont(new Font("SansSerif", Font.BOLD, 14));
+        } else if (value.length() > 10) {
+            valLbl.setFont(new Font("SansSerif", Font.BOLD, 18));
+        } else {
+            valLbl.setFont(new Font("SansSerif", Font.BOLD, 22));
+        }
         valLbl.setForeground(ThemeManager.TEXT);
         
         JLabel iconLbl = new JLabel(icon);

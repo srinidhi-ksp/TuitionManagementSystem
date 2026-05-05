@@ -10,10 +10,13 @@ import java.awt.Frame;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GridLayout;
+import java.awt.FlowLayout;
 import java.awt.RenderingHints;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import javax.swing.JTabbedPane;
 import javax.swing.AbstractCellEditor;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -47,6 +50,8 @@ public class FeesPanel extends JPanel {
 
     private JTable feesTable;
     private DefaultTableModel tableModel;
+    private JTable historyTable;
+    private DefaultTableModel historyModel;
     private FeeService feeService;
 
     private JLabel totalFeeCard;
@@ -95,27 +100,32 @@ public class FeesPanel extends JPanel {
     }
 
     private JPanel createContent() {
-        JPanel content = new JPanel(new BorderLayout(0, 24));
-        content.setBackground(PAGE_BG);
+        JTabbedPane tabs = new JTabbedPane();
+        tabs.setFont(new Font("SansSerif", Font.BOLD, 13));
 
-        // Summary Cards
-        JPanel cardsPanel = new JPanel(new GridLayout(1, 4, 20, 0));
-        cardsPanel.setBackground(PAGE_BG);
+        // 1. MAKE PAYMENT PANEL
+        JPanel paymentPanel = new JPanel(new BorderLayout(0, 20));
+        paymentPanel.setBackground(PAGE_BG);
+        paymentPanel.setBorder(new EmptyBorder(20, 0, 0, 0));
+
+        // Top Summary Cards
+        JPanel topCardsPanel = new JPanel(new GridLayout(1, 4, 20, 0));
+        topCardsPanel.setBackground(PAGE_BG);
         
         totalFeeCard = new JLabel("₹0.00", SwingConstants.CENTER);
         paidAmountCard = new JLabel("₹0.00", SwingConstants.CENTER);
         pendingAmountCard = new JLabel("₹0.00", SwingConstants.CENTER);
-        statusCard = new JLabel("—", SwingConstants.CENTER);
+        statusCard = new JLabel("-", SwingConstants.CENTER);
 
-        cardsPanel.add(createStatCard("Total Fees", totalFeeCard, ACCENT));
-        cardsPanel.add(createStatCard("Amount Paid", paidAmountCard, SUCCESS_GREEN));
-        cardsPanel.add(createStatCard("Pending Balance", pendingAmountCard, WARNING_ORANGE));
-        cardsPanel.add(createStatCard("Overall Status", statusCard, ERROR_RED));
+        topCardsPanel.add(createStatCard("Total Fees", totalFeeCard, ACCENT));
+        topCardsPanel.add(createStatCard("Amount Paid", paidAmountCard, SUCCESS_GREEN));
+        topCardsPanel.add(createStatCard("Pending Balance", pendingAmountCard, WARNING_ORANGE));
+        topCardsPanel.add(createStatCard("Overall Status", statusCard, ERROR_RED));
 
-        // Table Panel
-        JPanel tableCard = new JPanel(new BorderLayout());
-        tableCard.setBackground(CARD_BG);
-        tableCard.setBorder(BorderFactory.createLineBorder(new Color(230, 235, 245), 1, true));
+        // Payment Gateway (The Table and Action buttons)
+        JPanel paymentGatewayPanel = new JPanel(new BorderLayout());
+        paymentGatewayPanel.setBackground(CARD_BG);
+        paymentGatewayPanel.setBorder(BorderFactory.createLineBorder(new Color(230, 235, 245), 1, true));
 
         String[] cols = {"Subject Name", "Monthly Fee", "Payment Status", "Action", "subjectId"};
         tableModel = new DefaultTableModel(cols, 0) {
@@ -123,21 +133,60 @@ public class FeesPanel extends JPanel {
         };
         feesTable = new JTable(tableModel);
         styleTable(feesTable);
-        
-        // Hide subjectId column
         feesTable.getColumnModel().getColumn(4).setMinWidth(0);
         feesTable.getColumnModel().getColumn(4).setMaxWidth(0);
-        feesTable.getColumnModel().getColumn(4).setPreferredWidth(0);
 
         JScrollPane scroll = new JScrollPane(feesTable);
         scroll.setBorder(BorderFactory.createEmptyBorder());
         scroll.getViewport().setBackground(CARD_BG);
+        paymentGatewayPanel.add(scroll, BorderLayout.CENTER);
 
-        tableCard.add(scroll, BorderLayout.CENTER);
+        paymentPanel.add(topCardsPanel, BorderLayout.NORTH);
+        paymentPanel.add(paymentGatewayPanel, BorderLayout.CENTER);
 
-        content.add(cardsPanel, BorderLayout.NORTH);
-        content.add(tableCard, BorderLayout.CENTER);
-        return content;
+        // 2. PAYMENT HISTORY PANEL
+        JPanel historyPanel = new JPanel(new BorderLayout(0, 20));
+        historyPanel.setBackground(PAGE_BG);
+        historyPanel.setBorder(new EmptyBorder(20, 0, 0, 0));
+
+        String[] hCols = {"Date", "Subject", "Batch", "Amount", "Method", "Status"};
+        historyModel = new DefaultTableModel(hCols, 0) {
+            @Override public boolean isCellEditable(int r, int c) { return false; }
+        };
+        historyTable = new JTable(historyModel);
+        styleHistoryTable(historyTable);
+
+        JScrollPane hScroll = new JScrollPane(historyTable);
+        hScroll.setBorder(BorderFactory.createLineBorder(new Color(230, 235, 245)));
+        hScroll.getViewport().setBackground(CARD_BG);
+
+        JButton downloadBtn = new JButton("Download Receipt");
+        downloadBtn.setFont(new Font("SansSerif", Font.BOLD, 13));
+        downloadBtn.setPreferredSize(new Dimension(180, 45));
+        downloadBtn.setBackground(ACCENT);
+        downloadBtn.setForeground(Color.WHITE);
+
+        historyPanel.add(hScroll, BorderLayout.CENTER);
+        historyPanel.add(downloadBtn, BorderLayout.SOUTH);
+
+        // ADD TABS
+        tabs.addTab("Make Payment", paymentPanel);
+        tabs.addTab("Payment History", historyPanel);
+
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        mainPanel.add(tabs, BorderLayout.CENTER);
+        return mainPanel;
+    }
+
+    private void styleHistoryTable(JTable t) {
+        t.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        t.setRowHeight(45);
+        t.setShowGrid(false);
+        t.setShowHorizontalLines(true);
+        t.setGridColor(new Color(240, 242, 245));
+        t.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 12));
+        t.getTableHeader().setBackground(new Color(250, 251, 253));
+        t.getTableHeader().setPreferredSize(new Dimension(0, 40));
     }
 
     private JPanel createStatCard(String title, JLabel valueLabel, Color accent) {
@@ -185,13 +234,15 @@ public class FeesPanel extends JPanel {
             public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
                 Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
                 if (column == 2) {
-                    if ("PAID".equals(value)) {
+                    String status = String.valueOf(value).toUpperCase();
+                    if ("PAID".equals(status)) {
                         setForeground(SUCCESS_GREEN);
-                        setFont(getFont().deriveFont(Font.BOLD));
+                    } else if ("PARTIAL".equals(status) || "PENDING".equals(status)) {
+                        setForeground(WARNING_ORANGE);
                     } else {
                         setForeground(ERROR_RED);
-                        setFont(getFont().deriveFont(Font.BOLD));
                     }
+                    setFont(getFont().deriveFont(Font.BOLD));
                 } else {
                     setForeground(TEXT_PRI);
                 }
@@ -217,7 +268,7 @@ public class FeesPanel extends JPanel {
         }
         @Override public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int col) {
             String status = (String) table.getValueAt(row, 2);
-            if ("PAID".equals(status)) {
+            if ("PAID".equalsIgnoreCase(status)) {
                 setText("Generate Receipt");
                 setForeground(ACCENT);
                 setEnabled(true);
@@ -232,7 +283,6 @@ public class FeesPanel extends JPanel {
 
     private class ButtonEditor extends AbstractCellEditor implements TableCellEditor {
         private JButton button;
-        private String subjectId;
         private int row;
 
         public ButtonEditor() {
@@ -241,23 +291,47 @@ public class FeesPanel extends JPanel {
             button.addActionListener(e -> {
                 row = feesTable.getEditingRow();
                 if (row == -1) return;
+                
                 String batchIdStr = (String) tableModel.getValueAt(row, 4);
                 int batchId = Integer.parseInt(batchIdStr);
                 String studentId = SessionManager.getInstance().getUserId();
+                String status = (String) tableModel.getValueAt(row, 2);
+                String subjectName = (String) tableModel.getValueAt(row, 0);
+                String feeStr = (String) tableModel.getValueAt(row, 1);
                 
-                model.Receipt receipt = feeService.generateReceipt(studentId, batchId);
-                if (receipt != null) {
-                    new ReceiptDialog((Frame) SwingUtilities.getWindowAncestor(FeesPanel.this), receipt).setVisible(true);
-                } else {
-                    JOptionPane.showMessageDialog(FeesPanel.this, "Error generating receipt.", "Error", JOptionPane.ERROR_MESSAGE);
+                double amount = 0;
+                try {
+                    amount = Double.parseDouble(feeStr.replaceAll("[^0-9.]", ""));
+                } catch(Exception ex) {}
+
+                if ("PAID".equalsIgnoreCase(status)) {
+                    model.Receipt receipt = feeService.generateReceipt(studentId, batchId);
+                    if (receipt != null) {
+                        new ReceiptDialog((Frame) SwingUtilities.getWindowAncestor(FeesPanel.this), receipt).setVisible(true);
+                    } else {
+                        JOptionPane.showMessageDialog(FeesPanel.this, "Error generating receipt.", "Error", JOptionPane.ERROR_MESSAGE);
+                    }
+                    fireEditingStopped();
+                    return;
                 }
+                
+                if ("PENDING".equalsIgnoreCase(status)) {
+                    JOptionPane.showMessageDialog(FeesPanel.this, "Your payment is pending admin approval.\nPlease contact the tuition center.", "Status", JOptionPane.INFORMATION_MESSAGE);
+                    fireEditingStopped();
+                    return;
+                }
+
+                // For UNPAID or PARTIAL
+                new PaymentDialog((Frame) SwingUtilities.getWindowAncestor(FeesPanel.this), 
+                                 studentId, batchId, amount, subjectName, () -> loadData()).setVisible(true);
+                
                 fireEditingStopped();
             });
         }
 
         @Override public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int r, int c) {
             String status = (String) table.getValueAt(r, 2);
-            if ("PAID".equals(status)) {
+            if ("PAID".equalsIgnoreCase(status)) {
                 button.setText("Generate Receipt");
                 button.setForeground(ACCENT);
                 button.setEnabled(true);
@@ -284,22 +358,13 @@ public class FeesPanel extends JPanel {
         new javax.swing.SwingWorker<Void, Void>() {
             List<SubjectFeeDTO> fees;
             Map<String, Object> summary;
+            List<Map<String, Object>> history;
 
             @Override
             protected Void doInBackground() throws Exception {
-                // FeeService will internally resolve user_id → student_id
-                System.out.println("[FeesPanel] Calling feeService.getStudentFeeDetails()...");
                 fees = feeService.getStudentFeeDetails(userIdFromSession);
-                
-                System.out.println("[FeesPanel] Calling feeService.getFeeSummary()...");
                 summary = feeService.getFeeSummary(userIdFromSession);
-                
-                System.out.println("[FeesPanel] 📊 Summary: " + (summary != null ? "OK" : "NULL"));
-                if (summary != null) {
-                    System.out.println("[FeesPanel]   - Status: " + summary.get("status"));
-                    System.out.println("[FeesPanel]   - Total Fee: " + summary.get("totalFee"));
-                    System.out.println("[FeesPanel]   - Fees count: " + (fees != null ? fees.size() : 0));
-                }
+                history = feeService.getPaymentHistory(userIdFromSession);
                 return null;
             }
 
@@ -308,32 +373,34 @@ public class FeesPanel extends JPanel {
                 try {
                     get();
                     tableModel.setRowCount(0);
+                    historyModel.setRowCount(0);
+
+                    // Update summary cards
                     if (summary != null) {
                         totalFeeCard.setText(String.format("₹%.2f", (Double)summary.get("totalFee")));
                         paidAmountCard.setText(String.format("₹%.2f", (Double)summary.get("paidAmount")));
                         pendingAmountCard.setText(String.format("₹%.2f", (Double)summary.get("pendingAmount")));
                         
                         String status = (String) summary.get("status");
-                        statusCard.setText(status);
-                        statusCard.setForeground("PAID".equals(status) ? SUCCESS_GREEN : ERROR_RED);
+                        statusCard.setText(status != null ? status : "-");
                         
-                        System.out.println("[FeesPanel] ✅ Status card updated: " + status);
+                        if ("PAID".equals(status)) statusCard.setForeground(SUCCESS_GREEN);
+                        else if ("PARTIAL".equals(status) || "PENDING".equals(status)) statusCard.setForeground(WARNING_ORANGE);
+                        else statusCard.setForeground(ERROR_RED);
                     }
 
+                    // Populate current fees table
                     if (fees != null && !fees.isEmpty()) {
-                        System.out.println("[FeesPanel] Populating table with " + fees.size() + " fee records");
                         for (SubjectFeeDTO f : fees) {
                             tableModel.addRow(new Object[]{
                                 f.getSubjectName(), 
                                 String.format("₹%.2f", f.getMonthlyFee()), 
                                 f.getPaymentStatus(),
                                 "Generate Receipt",
-                                String.valueOf(f.getBatchId())  // Store batchId as string for table
+                                String.valueOf(f.getBatchId())
                             });
                         }
                     } else {
-                        System.out.println("[FeesPanel] ⚠️  No fees found - checking if this is enrollment issue...");
-                        // Only show "No Enrollment" if the mapping actually succeeded but no enrollments exist
                         String statusMsg = summary != null ? (String) summary.get("status") : "UNKNOWN";
                         if ("NO_ENROLLMENT".equals(statusMsg)) {
                             tableModel.addRow(new Object[]{"No active enrollments found", "", "", "", ""});
@@ -341,8 +408,22 @@ public class FeesPanel extends JPanel {
                             tableModel.addRow(new Object[]{"Error: Unable to load fee data", "", "", "", ""});
                         }
                     }
+
+                    // Populate history table
+                    if (history != null) {
+                        for (Map<String, Object> row : history) {
+                            historyModel.addRow(new Object[]{
+                                row.get("date"),
+                                row.get("subject"),
+                                row.get("batch"),
+                                String.format("₹%.2f", (Double)row.get("amount")),
+                                row.get("method"),
+                                row.get("status")
+                            });
+                        }
+                    }
+
                 } catch (Exception e) {
-                    System.err.println("[FeesPanel] ❌ Error in loadData done(): " + e.getMessage());
                     e.printStackTrace();
                 }
             }

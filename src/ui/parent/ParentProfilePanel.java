@@ -10,6 +10,9 @@ import model.Student;
 import service.ParentPortalService;
 import util.SessionManager;
 import util.ThemeManager;
+import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.Filters;
+import db.DBConnection;
 
 public class ParentProfilePanel extends JPanel {
 
@@ -98,9 +101,12 @@ public class ParentProfilePanel extends JPanel {
         dao.ParentDAO pDAO = new dao.ParentDAO();
         Parent p = pDAO.getByUserId(pId);
 
-        String pName = (p != null && p.getName() != null) ? p.getName() : "Parent User";
-        String pEmail = (p != null && p.getEmail() != null) ? p.getEmail() : "Not Available";
-        String pPhone = (p != null && p.getPhone() != null) ? p.getPhone() : "Not Available";
+        String pName = (p != null && p.getName() != null) ? p.getName() : SessionManager.getInstance().getUserName();
+        String pEmail = (p != null && p.getEmail() != null) ? p.getEmail() : "-";
+        String pPhone = (p != null && p.getPhone() != null) ? p.getPhone() : "-";
+
+        if (pEmail.equalsIgnoreCase("Not Available")) pEmail = "-";
+        if (pPhone.equalsIgnoreCase("Not Available")) pPhone = "-";
 
         JLabel nameLabel = new JLabel(pName);
         nameLabel.setFont(new Font("SansSerif", Font.BOLD, 22));
@@ -161,19 +167,19 @@ public class ParentProfilePanel extends JPanel {
         name.setFont(new Font("SansSerif", Font.BOLD, 16));
         name.setForeground(ThemeManager.TEXT);
         
-        JLabel sid = new JLabel("🆔 ID: " + (s.getUserId() != null ? s.getUserId() : "N/A"));
+        JLabel sid = new JLabel("🆔 ID: " + (s.getUserId() != null ? s.getUserId() : "-"));
         sid.setFont(new Font("SansSerif", Font.PLAIN, 13));
         sid.setForeground(ThemeManager.SUB_TEXT);
         
-        JLabel std = new JLabel("📚 Standard: " + (s.getCurrentStd() != null ? s.getCurrentStd() : "N/A"));
+        JLabel std = new JLabel("📚 Standard: " + (s.getCurrentStd() != null ? s.getCurrentStd() : "-"));
         std.setFont(new Font("SansSerif", Font.PLAIN, 13));
         std.setForeground(ThemeManager.SUB_TEXT);
         
-        JLabel board = new JLabel("🏫 Board: " + (s.getBoard() != null ? s.getBoard() : "Not Available"));
+        JLabel board = new JLabel("🏫 Board: " + (s.getBoard() != null ? s.getBoard() : "-"));
         board.setFont(new Font("SansSerif", Font.PLAIN, 13));
         board.setForeground(ThemeManager.SUB_TEXT);
 
-        JLabel city = new JLabel("📍 City: " + (s.getCity() != null ? s.getCity() : "Not Available"));
+        JLabel city = new JLabel("📍 City: " + (s.getCity() != null ? s.getCity() : "-"));
         city.setFont(new Font("SansSerif", Font.PLAIN, 13));
         city.setForeground(ThemeManager.SUB_TEXT);
 

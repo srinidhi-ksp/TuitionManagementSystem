@@ -240,7 +240,7 @@ public class ParentMarksPanel extends JPanel {
     }
 
     private String calculateGrade(int o, int m) {
-        if(m == 0) return "N/A";
+        if(m == 0) return "-";
         double p = (double)o/m*100;
         if(p >= 90) return "A+";
         if(p >= 80) return "A";

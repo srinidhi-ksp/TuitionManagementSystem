@@ -71,4 +71,27 @@ public class SalaryDAO {
         }
         return list;
     }
+
+    public List<SalaryRecord> getSalaryByTeacher(String teacherId) {
+        List<SalaryRecord> list = new ArrayList<>();
+        if (salaryCollection == null) return list;
+
+        for (Document doc : salaryCollection.find(Filters.eq("teacher_id", teacherId))
+                .sort(com.mongodb.client.model.Sorts.descending("year", "month"))) {
+            SalaryRecord r = new SalaryRecord();
+            r.setId(doc.getString("_id"));
+            r.setTeacherId(doc.getString("teacher_id"));
+            r.setMonth(doc.getString("month"));
+            r.setYear(doc.getString("year"));
+            r.setTotalDays(doc.getInteger("total_days", 0));
+            r.setPresentDays(doc.getInteger("present_days", 0));
+            r.setAbsentDays(doc.getInteger("absent_days", 0));
+            r.setPerDaySalary(doc.get("per_day_salary") instanceof Number ? ((Number)doc.get("per_day_salary")).doubleValue() : 0.0);
+            r.setDeduction(doc.get("deduction") instanceof Number ? ((Number)doc.get("deduction")).doubleValue() : 0.0);
+            r.setFinalSalary(doc.get("final_salary") instanceof Number ? ((Number)doc.get("final_salary")).doubleValue() : 0.0);
+            r.setLastUpdated(doc.getDate("last_updated"));
+            list.add(r);
+        }
+        return list;
+    }
 }

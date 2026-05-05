@@ -39,8 +39,8 @@ public class SalaryService {
             Teacher teacher = teacherDAO.getTeacherById(teacherId);
             if (teacher == null) return;
             
-            // Assume base_salary is stored in teacher.getSalaryAmount()
-            double baseSalary = teacher.getSalaryAmount();
+            // Assume base_salary is stored in teacher.getSalary()
+            double baseSalary = teacher.getSalary();
             if (baseSalary <= 0) baseSalary = 5000; // Fallback as per prompt example
 
             // 2. Define month range
@@ -77,10 +77,16 @@ public class SalaryService {
 
             int presentDays = Math.max(0, attendances.size() - absentDays);
             
-            // Per prompt: Salary = Base - (Base/TotalDays * AbsentDays)
-            double perDaySalary = baseSalary / totalWorkingDays;
-            double deduction = perDaySalary * absentDays;
+            // Tiered Deduction Logic:
+            // 1. If absentDays <= 5: Deduction = 0
+            // 2. If absentDays > 5: Deduction = 500 + (absentDays - 5) * 100
+            double deduction = 0;
+            if (absentDays > 5) {
+                deduction = 500 + (absentDays - 5) * 100;
+            }
+            
             double finalSalary = Math.max(0, baseSalary - deduction);
+            double perDaySalary = baseSalary / totalWorkingDays;
 
             // 4. Save record
             SalaryRecord record = new SalaryRecord();

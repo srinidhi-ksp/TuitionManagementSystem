@@ -72,9 +72,25 @@ public class TeacherPortalService {
     }
 
     public List<StudentRow> getTeacherStudents(String teacherId) {
+        return getTeacherStudentsByBatch(teacherId, -1); // -1 means All Batches
+    }
+
+    public List<StudentRow> getTeacherStudentsByBatch(String teacherId, int filterBatchId) {
         List<StudentRow> rows = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
-        for (Batch batch : getTeacherBatches(teacherId)) {
+        
+        List<Batch> batchesToProcess;
+        if (filterBatchId == -1) {
+            batchesToProcess = getTeacherBatches(teacherId);
+        } else {
+            batchesToProcess = new ArrayList<>();
+            Batch b = batchDAO.getBatchById(filterBatchId);
+            if (b != null && teacherId.equals(b.getTeacherUserId())) {
+                batchesToProcess.add(b);
+            }
+        }
+
+        for (Batch batch : batchesToProcess) {
             for (Enrollment enrollment : enrollmentDAO.getActiveEnrollmentsByBatchId(batch.getBatchId())) {
                 String studentId = enrollment.getStudentUserId();
                 if (studentId == null || !seen.add(studentId)) continue;

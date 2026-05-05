@@ -70,22 +70,36 @@ public class FeeAnalyticsDAO {
                 data.put("batch", "--");
             } else {
                 boolean allPaid = true;
+                boolean anyPaid = false;
                 StringBuilder batches = new StringBuilder();
+                
                 for (Document enroll : enrollments) {
                     Integer batchId = enroll.getInteger("batch_id");
                     if (batchId != null) {
+                        java.util.Map<String, Object> paySum = paymentDao.getBatchPaymentSummary(s.getUserId(), batchId);
+                        double paid = (Double) paySum.get("totalPaid");
+                        
                         model.Batch b = batchDao.getBatchById(batchId);
                         if (b != null) {
                             if (batches.length() > 0) batches.append(", ");
                             batches.append(b.getBatchName());
                             
-                            if (!paymentDao.isBatchPaid(s.getUserId(), b.getBatchId())) {
+                            model.Subject subj = new dao.SubjectDAO().getSubjectById(b.getSubjectId());
+                            double fee = (subj != null) ? subj.getMonthlyFee() : 0;
+                            
+                            if (paid >= fee && fee > 0) {
+                                // this batch fully paid
+                            } else if (paid > 0) {
+                                anyPaid = true;
+                                allPaid = false;
+                            } else {
                                 allPaid = false;
                             }
                         }
                     }
                 }
-                data.put("status", allPaid ? "PAID" : "UNPAID");
+                String studentStatus = allPaid ? "PAID" : (anyPaid ? "PARTIAL" : "UNPAID");
+                data.put("status", studentStatus);
                 data.put("batch", batches.toString());
             }
             report.add(data);
@@ -103,10 +117,12 @@ public class FeeAnalyticsDAO {
         long total = report.size();
         long paid = report.stream().filter(r -> "PAID".equals(r.get("status"))).count();
         long unpaid = report.stream().filter(r -> "UNPAID".equals(r.get("status"))).count();
+        long partial = report.stream().filter(r -> "PARTIAL".equals(r.get("status"))).count();
         
         stats.put("total", total);
         stats.put("paid", paid);
         stats.put("unpaid", unpaid);
+        stats.put("partial", partial);
         
         return stats;
     }

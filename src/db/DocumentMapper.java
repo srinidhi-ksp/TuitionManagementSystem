@@ -1,6 +1,7 @@
 package db;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 import org.bson.Document;
@@ -21,7 +22,8 @@ public class DocumentMapper {
         }
         
         User user = new User();
-        String userId = doc.getString("_id");
+        Object idObj = doc.get("_id");
+        String userId = idObj != null ? idObj.toString() : null;
         user.setUserId(userId);
         System.out.println("[DocumentMapper] Mapping user: " + userId);
         
@@ -82,19 +84,21 @@ public class DocumentMapper {
     public static Student documentToStudent(Document doc) {
         if (doc == null) return null;
         Student s = new Student();
-        s.setUserId(doc.getString("_id")); // _id in Student matches S001 etc
+        Object idObj = doc.get("_id");
+        s.setUserId(idObj != null ? idObj.toString() : null); // _id in Student matches S001 etc
         s.setName(doc.getString("full_name"));
         s.setDob(doc.getDate("dob"));
         s.setEmail(doc.getString("email"));
         s.setPhone(doc.getString("phone"));
 
-        // join_date from DB (null if not stored — caller will use users.created_at)
-        s.setJoinDate(doc.getDate("join_date"));
+        java.util.Date jd = doc.getDate("joinDate");
+        if (jd == null) jd = doc.getDate("join_date");
+        s.setJoinDate(jd);
 
-        // ✅ DB field is 'standard' (not 'current_std')
-        String std = doc.getString("standard");
-        if (std == null) std = doc.getString("current_std"); // backward compat
-        s.setCurrentStd(std);
+        Object stdObj = doc.get("standard");
+        if (stdObj == null) stdObj = doc.get("class");
+        if (stdObj == null) stdObj = doc.get("current_std");
+        s.setCurrentStd(stdObj != null ? stdObj.toString() : null);
         s.setBoard(doc.getString("board"));
 
         // city from dedicated field, fallback to address
@@ -145,7 +149,8 @@ public class DocumentMapper {
     public static Teacher documentToTeacher(Document doc) {
         if (doc == null) return null;
         Teacher t = new Teacher();
-        t.setUserId(doc.getString("_id")); // Maps like T001
+        Object idObj = doc.get("_id");
+        t.setUserId(idObj != null ? idObj.toString() : null); // Maps like T001
         t.setName(doc.getString("full_name"));
         // ✅ CRITICAL: read email so getCreatedAtByEmail() can look up users.created_at
         t.setEmail(doc.getString("email"));
@@ -163,18 +168,23 @@ public class DocumentMapper {
         t.setStreet(doc.getString("street"));
 
         // ── Join Date: from DB field, caller uses users.created_at as fallback ──
-        t.setJoinDate(doc.getDate("join_date"));
+        Date joinDate = doc.getDate("joinDate");
+        if (joinDate == null) joinDate = doc.getDate("join_date");
+        if (joinDate != null) {
+            t.setJoinDate(new java.text.SimpleDateFormat("dd-MM-yyyy").format(joinDate));
+        } else {
+            t.setJoinDate("-");
+        }
 
         // ── Qualifications list ──
         List<String> quals = doc.getList("qualifications", String.class);
         if (quals != null) t.setQualifications(quals);
 
-        // ── NEW: flat experience_years, highest_degree ──
         Object expObj = doc.get("experience_years");
         if (expObj instanceof Number) {
-            t.setExperienceYears(((Number) expObj).intValue());
+            t.setExperience(((Number) expObj).intValue());
         } else {
-            t.setExperienceYears(null);
+            t.setExperience(0);
         }
 
         t.setHighestDegree(doc.getString("highest_degree"));
@@ -183,7 +193,7 @@ public class DocumentMapper {
         Object flatSalObj = doc.get("salary");
         if (flatSalObj instanceof Number) {
             // Flat salary field (e.g. salary: 50000)
-            t.setSalaryAmount(((Number) flatSalObj).doubleValue());
+            t.setSalary(((Number) flatSalObj).doubleValue());
         } else if (flatSalObj instanceof Document) {
             // Legacy nested salary doc
             Document salDoc = (Document) flatSalObj;
@@ -191,13 +201,13 @@ public class DocumentMapper {
             Object baseSalObj = salDoc.get("base_salary");
             if (baseSalObj instanceof Number) {
                 salary.setBaseSalary(((Number) baseSalObj).doubleValue());
-                t.setSalaryAmount(((Number) baseSalObj).doubleValue()); // mirror to flat
+                t.setSalary(((Number) baseSalObj).doubleValue()); // mirror to flat
             }
             Object workingDaysObj = salDoc.get("working_days");
             if (workingDaysObj instanceof Number) {
                 salary.setWorkingDays(((Number) workingDaysObj).intValue());
             }
-            t.setSalary(salary);
+            t.setLegacySalary(salary);
         }
 
         return t;
@@ -218,16 +228,16 @@ public class DocumentMapper {
         if (teacher.getJoinDate() != null) doc.append("join_date", teacher.getJoinDate());
 
         // ── NEW flat fields ──
-        doc.append("experience_years", teacher.getExperienceYears());
+        doc.append("experience_years", teacher.getExperience());
         if (teacher.getHighestDegree() != null) doc.append("highest_degree", teacher.getHighestDegree());
         // Store salary as flat number (compatible with bulkWrite schema)
-        if (teacher.getSalaryAmount() > 0) {
-            doc.append("salary", teacher.getSalaryAmount());
-        } else if (teacher.getSalary() != null) {
+        if (teacher.getSalary() > 0) {
+            doc.append("salary", teacher.getSalary());
+        } else if (teacher.getLegacySalary() != null) {
             // Fallback: persist legacy nested salary
             Document salDoc = new Document();
-            salDoc.append("base_salary",  teacher.getSalary().getBaseSalary());
-            salDoc.append("working_days", teacher.getSalary().getWorkingDays());
+            salDoc.append("base_salary",  teacher.getLegacySalary().getBaseSalary());
+            salDoc.append("working_days", teacher.getLegacySalary().getWorkingDays());
             doc.append("salary", salDoc);
         }
 
@@ -582,32 +592,55 @@ public class DocumentMapper {
     public static model.Payment documentToPayment(Document doc) {
         if (doc == null) return null;
         model.Payment p = new model.Payment();
+
+        // ID
+        Object id = doc.get("_id");
+        if (id != null) p.setPaymentId(id.hashCode());
+
+        // Core fields — use "amount" (new schema), fallback to "amount_paid" (legacy)
+        Object amt = doc.get("amount");
+        if (amt == null) amt = doc.get("amount_paid");
+        if (amt instanceof Number) p.setAmountPaid(((Number) amt).doubleValue());
+
+        // Method — use "method" (new), fallback to "payment_mode" (legacy)
+        String method = doc.getString("method");
+        if (method == null) method = doc.getString("payment_mode");
+        p.setPaymentMode(method);
+
+        // Status
+        String status = doc.getString("status");
+        if ("PAID".equalsIgnoreCase(status)) {
+            status = "SUCCESS";
+        }
+        p.setStatus(status);
+
+        // Date — use "date" (new), fallback to "payment_date" (legacy)
+        Object dateObj = doc.get("date");
+        if (dateObj == null) dateObj = doc.get("payment_date");
+        if (dateObj instanceof java.util.Date) p.setPaymentDate((java.util.Date) dateObj);
+
+        // Batch and Student IDs
+        String sId = doc.getString("student_id");
+        if (sId == null) sId = doc.getString("studentId");
+        p.setStudentId(sId);
         
-        Object idObj = doc.get("_id");
-        if (idObj instanceof Number) p.setPaymentId(((Number) idObj).intValue());
-        else if (idObj != null) try { p.setPaymentId(Integer.parseInt(idObj.toString())); } catch (Exception ex) {}
-        
-        Object feeObj = doc.get("fee_id");
-        if (feeObj instanceof Number) p.setFeeId(((Number) feeObj).intValue());
-        else if (feeObj != null) try { p.setFeeId(Integer.parseInt(feeObj.toString())); } catch (Exception ex) {}
-        
-        Object batchObj = doc.get("batch_id");
-        if (batchObj instanceof Number) p.setBatchId(((Number) batchObj).intValue());
-        else if (batchObj != null) try { p.setBatchId(Integer.parseInt(batchObj.toString())); } catch (Exception ex) {}
-        
+        Object batchId = doc.get("batch_id");
+        if (batchId == null) batchId = doc.get("batchId");
+        if (batchId instanceof Number) p.setBatchId(((Number) batchId).intValue());
+        else if (batchId instanceof String) {
+            String bStr = (String) batchId;
+            if (bStr.toLowerCase().startsWith("batch")) {
+                try {
+                    p.setBatchId(Integer.parseInt(bStr.replaceAll("\\D", "")));
+                } catch (Exception e) {}
+            }
+        }
+
+        // Month
         p.setMonthStr(doc.getString("month"));
-        p.setStatus(doc.getString("status"));
-        p.setStudentId(doc.getString("student_id"));
-        
-        Object amountObj = doc.get("amount_paid");
-        if (amountObj instanceof Number) p.setAmountPaid(((Number) amountObj).doubleValue());
-        
-        p.setPaymentDate(doc.getDate("payment_date"));
-        if (p.getPaymentDate() == null) p.setPaymentDate(doc.getDate("date"));
-        
-        p.setPaymentMode(doc.getString("payment_mode"));
+
         p.setReceiptNo(doc.getString("receipt_no"));
-        
+
         return p;
     }
 
@@ -618,10 +651,11 @@ public class DocumentMapper {
         doc.append("batch_id", p.getBatchId());
         doc.append("student_id", p.getStudentId());
         doc.append("month", p.getMonthStr());
-        doc.append("status", p.getStatus() != null ? p.getStatus() : "PAID");
-        doc.append("amount_paid", p.getAmountPaid());
-        doc.append("payment_date", p.getPaymentDate());
-        doc.append("payment_mode", p.getPaymentMode());
+        doc.append("status", p.getStatus() != null ? p.getStatus() : "SUCCESS");
+        // Standard schema
+        doc.append("amount", p.getAmountPaid());
+        doc.append("date", p.getPaymentDate());
+        doc.append("method", p.getPaymentMode());
         doc.append("receipt_no", p.getReceiptNo());
         return doc;
     }

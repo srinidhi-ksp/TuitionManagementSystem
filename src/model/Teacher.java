@@ -6,7 +6,7 @@ import java.util.List;
 public class Teacher extends User {
 
     private String specialization;
-    private Date joinDate;
+    private String joinDate;
     private String adminId;
 
     private int doorNo;
@@ -16,11 +16,10 @@ public class Teacher extends User {
 
     // New MongoDB fields
     private List<String> qualifications;
-    private Salary salary; // legacy nested salary object
+    private Salary legacySalary; // legacy nested salary object
 
-    // ── NEW flat fields (aligned with bulkWrite schema) ──
-    private Integer experienceYears;
-    private double salaryAmount;  // flat salary number (e.g. 50000)
+    private int experience;
+    private double salary;
     private String highestDegree;
     private String status;        // ACTIVE / INACTIVE
 
@@ -48,7 +47,7 @@ public class Teacher extends User {
 
     // Parameterized Constructor
     public Teacher(String userId, String name, String email, String password, String role, String address, Date createdAt,
-                   String specialization, Date joinDate, String adminId,
+                   String specialization, String joinDate, String adminId,
                    int doorNo, String street, String city, long pincode) {
 
         super(userId, name, email, password, role, address, createdAt);
@@ -67,8 +66,8 @@ public class Teacher extends User {
     public String getSpecialization() { return specialization; }
     public void setSpecialization(String specialization) { this.specialization = specialization; }
 
-    public Date getJoinDate() { return joinDate; }
-    public void setJoinDate(Date joinDate) { this.joinDate = joinDate; }
+    public String getJoinDate() { return joinDate; }
+    public void setJoinDate(String joinDate) { this.joinDate = joinDate; }
 
     public String getAdminId() { return adminId; }
     public void setAdminId(String adminId) { this.adminId = adminId; }
@@ -88,23 +87,14 @@ public class Teacher extends User {
     public List<String> getQualifications() { return qualifications; }
     public void setQualifications(List<String> qualifications) { this.qualifications = qualifications; }
 
-    public Salary getSalary() { return salary; }
-    public void setSalary(Salary salary) { this.salary = salary; }
+    public Salary getLegacySalary() { return legacySalary; }
+    public void setLegacySalary(Salary legacySalary) { this.legacySalary = legacySalary; }
 
-    // ── NEW flat field accessors ──
+    public int getExperience() { return experience; }
+    public void setExperience(int experience) { this.experience = experience; }
 
-    public Integer getExperienceYears() { return experienceYears; }
-    public void setExperienceYears(Integer experienceYears) { this.experienceYears = experienceYears; }
-
-    /**
-     * Returns flat salary amount. Falls back to nested Salary.baseSalary if not set.
-     */
-    public double getSalaryAmount() {
-        if (salaryAmount > 0) return salaryAmount;
-        if (salary != null && salary.getBaseSalary() > 0) return salary.getBaseSalary();
-        return 0;
-    }
-    public void setSalaryAmount(double salaryAmount) { this.salaryAmount = salaryAmount; }
+    public double getSalary() { return salary; }
+    public void setSalary(double salary) { this.salary = salary; }
 
     public String getHighestDegree() { return highestDegree; }
     public void setHighestDegree(String highestDegree) { this.highestDegree = highestDegree; }

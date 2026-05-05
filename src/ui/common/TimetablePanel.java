@@ -10,6 +10,10 @@ import dao.BatchDAO;
 import model.Batch;
 import model.Schedule;
 import util.ThemeManager;
+import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.Filters;
+import db.DBConnection;
+import db.DocumentMapper;
 
 public class TimetablePanel extends JPanel {
 
@@ -46,18 +50,97 @@ public class TimetablePanel extends JPanel {
     }
 
     public void refreshTimetable() {
-        List<Batch> batches;
-        if ("TEACHER".equals(viewType)) {
-            batches = batchDAO.getBatchesByTeacher(filterId);
-        } else if ("STUDENT".equals(viewType)) {
-            batches = batchDAO.getBatchesByStudentEnrollment(filterId);
-        } else {
-            batches = batchDAO.getAllBatches();
+        MongoDatabase database = DBConnection.getDatabase();
+        if (database == null) return;
+
+        List<Batch> displayBatches = new ArrayList<>();
+        
+        try {
+            if ("STUDENT".equals(viewType)) {
+                // STEP 1 — RESOLVE USER ID → STUDENT ID
+                // filterId from StudentDashboard is the User ID (e.g. U21).
+                // Enrollments store the Student ID (e.g. S001). Resolve it first.
+                String resolvedStudentId = filterId;
+                try {
+                    dao.StudentDAO studentDAO = new dao.StudentDAO();
+                    model.Student student = studentDAO.getStudentByUserId(filterId);
+                    if (student != null && student.getUserId() != null) {
+                        resolvedStudentId = student.getUserId();
+                        System.out.println("[TimetablePanel] Resolved " + filterId + " → " + resolvedStudentId);
+                    } else {
+                        System.out.println("[TimetablePanel] Could not resolve User ID, using raw: " + filterId);
+                    }
+                } catch (Exception ex) {
+                    System.err.println("[TimetablePanel] Error resolving student ID: " + ex.getMessage());
+                }
+
+                // STEP 2 — FETCH ENROLLMENTS (OR across all 3 field name variants)
+                com.mongodb.client.MongoCollection<org.bson.Document> enrollmentsCollection = database.getCollection("enrollments");
+                final String sid = resolvedStudentId;
+                List<org.bson.Document> enrollments = enrollmentsCollection.find(
+                    Filters.and(
+                        Filters.or(
+                            Filters.eq("student_user_id", sid),
+                            Filters.eq("student_id", sid),
+                            Filters.eq("user_id", sid)
+                        ),
+                        com.mongodb.client.model.Filters.regex("status", "^ACTIVE$", "i")
+                    )
+                ).into(new ArrayList<>());
+                System.out.println("[TimetablePanel] Found " + enrollments.size() + " enrollments for student: " + sid);
+
+                // STEP 3 — EXTRACT BATCH IDS
+                List<Integer> batchIds = new ArrayList<>();
+                for (org.bson.Document e : enrollments) {
+                    Object bIdObj = e.get("batch_id");
+                    if (bIdObj instanceof Number) {
+                        batchIds.add(((Number) bIdObj).intValue());
+                    }
+                }
+
+                if (!batchIds.isEmpty()) {
+                    // STEP 3 — FETCH TIMETABLE (using batches as source of schedule)
+                    com.mongodb.client.MongoCollection<org.bson.Document> batchColl = database.getCollection("batches");
+                    com.mongodb.client.MongoCollection<org.bson.Document> teacherColl = database.getCollection("teachers");
+
+                    List<org.bson.Document> batchesDocs = batchColl.find(
+                        Filters.in("_id", batchIds)
+                    ).into(new ArrayList<>());
+
+                    for (org.bson.Document bDoc : batchesDocs) {
+                        // STEP 4 — JOIN WITH BATCH + TEACHER
+                        Object tIdObj = bDoc.get("teacher_id");
+                        String tId = tIdObj != null ? tIdObj.toString() : null;
+                        
+                        org.bson.Document teacherDoc = teacherColl.find(Filters.eq("user_id", tId)).first();
+                        if (teacherDoc == null) teacherDoc = teacherColl.find(Filters.eq("_id", tId)).first();
+
+                        Batch b = DocumentMapper.documentToBatch(bDoc);
+                        if (b != null) {
+                            // Link teacher name for display (Part 6 Step 4)
+                            Object tNameObj = teacherDoc != null ? teacherDoc.get("full_name") : null;
+                            if (tNameObj == null && teacherDoc != null) tNameObj = teacherDoc.get("name");
+                            
+                            String tName = tNameObj != null ? tNameObj.toString() : "Not Assigned";
+                            
+                            // Temporary storage for display logic
+                            b.setTeacherUserId(tName); // Using teacherId field as name carrier for the UI labels
+                            displayBatches.add(b);
+                        }
+                    }
+                }
+            } else if ("TEACHER".equals(viewType)) {
+                displayBatches = batchDAO.getBatchesByTeacher(filterId);
+            } else {
+                displayBatches = batchDAO.getAllBatches();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
 
         // 1. Extract dynamic time slots
         timeSlots.clear();
-        for (Batch b : batches) {
+        for (Batch b : displayBatches) {
             if (b.getSchedules() != null) {
                 for (Schedule s : b.getSchedules()) {
                     timeSlots.add(s.getStart() + " - " + s.getEnd());
@@ -86,7 +169,7 @@ public class TimetablePanel extends JPanel {
         for (String day : DAYS) {
             gridContainer.add(createDayLabel(day));
             for (String slot : timeSlots) {
-                gridContainer.add(createCell(day, slot, batches));
+                gridContainer.add(createCell(day, slot, displayBatches));
             }
         }
 
@@ -142,32 +225,41 @@ public class TimetablePanel extends JPanel {
             cell.setBackground(defaultBg);
             cell.setCursor(new Cursor(Cursor.HAND_CURSOR));
             
-            dao.TeacherDAO tDAO = new dao.TeacherDAO();
-            model.Teacher teacher = tDAO.getTeacherById(b.getTeacherId());
-            String tName = teacher != null ? teacher.getName() : "Not Assigned";
+            // Use the name stored in teacherUserId if available (from join in Part 6 Step 4)
+            String tName = b.getTeacherUserId() != null ? b.getTeacherUserId() : "Not Assigned";
+            if (tName.equals(b.getTeacherId())) { // fallback if join wasn't done
+                dao.TeacherDAO tDAO = new dao.TeacherDAO();
+                model.Teacher teacher = tDAO.getTeacherById(b.getTeacherId());
+                tName = (teacher != null) ? teacher.getName() : "Not Assigned";
+            }
             
             cell.setToolTipText("Teacher: " + tName);
+            cell.putClientProperty("batch", b);
             
             JLabel name = new JLabel("<html><div style='text-align:center;'><b>" + b.getBatchName() + "</b></div></html>", SwingConstants.CENTER);
             name.setFont(new Font("SansSerif", Font.PLAIN, 11));
             cell.add(name);
             
+            final String finalTName = tName;
             cell.addMouseListener(new java.awt.event.MouseAdapter() {
                 public void mouseEntered(java.awt.event.MouseEvent e) { cell.setBackground(hoverBg); }
                 public void mouseExited(java.awt.event.MouseEvent e) { cell.setBackground(defaultBg); }
                 public void mouseClicked(java.awt.event.MouseEvent e) {
-                    showBatchDetailsPopup(b, tName, day, slot);
+                    Batch batchObj = (Batch) cell.getClientProperty("batch");
+                    if (batchObj != null) {
+                        showBatchDetailsPopup(batchObj, finalTName, day, slot);
+                    }
                 }
             });
         } else {
-            Color defaultBg = new Color(254, 226, 226);
-            Color hoverBg = new Color(254, 202, 202);
+            Color defaultBg = new Color(219, 234, 254);
+            Color hoverBg = new Color(191, 219, 254);
             cell.setBackground(defaultBg);
             cell.setCursor(new Cursor(Cursor.HAND_CURSOR));
-            cell.setToolTipText("Conflict Detected! Click for details.");
+            cell.setToolTipText(matches.size() + " Batches. Click for details.");
             
-            JLabel conf = new JLabel("<html><div style='text-align:center;'><b>⚠ CONFLICT</b><br>" + matches.size() + " Batches</div></html>", SwingConstants.CENTER);
-            conf.setForeground(new Color(220, 38, 38));
+            JLabel conf = new JLabel("<html><div style='text-align:center;'><b>" + matches.size() + " Batches</b></div></html>", SwingConstants.CENTER);
+            conf.setForeground(new Color(59, 130, 246));
             conf.setFont(new Font("SansSerif", Font.BOLD, 10));
             cell.add(conf);
             
@@ -184,17 +276,31 @@ public class TimetablePanel extends JPanel {
     }
 
     private void showBatchDetailsPopup(Batch b, String tName, String day, String slot) {
-        dao.EnrollmentDAO eDAO = new dao.EnrollmentDAO();
-        long studentCount = eDAO.getEnrollmentsByBatchId(b.getBatchId()).stream()
-                .filter(e -> "ACTIVE".equalsIgnoreCase(e.getStatus())).count();
-                
-        String details = "<html><body style='width: 250px; padding: 10px; font-family: SansSerif;'>"
+        dao.TestsDAO tDAO = new dao.TestsDAO();
+        List<model.Test> tests = tDAO.getTestsByBatchId(b.getBatchId());
+        model.Test nextTest = null;
+        java.util.Date now = new java.util.Date();
+        for (model.Test test : tests) {
+            if (test.getTestDate() != null && test.getTestDate().after(now)) {
+                if (nextTest == null || test.getTestDate().before(nextTest.getTestDate())) {
+                    nextTest = test;
+                }
+            }
+        }
+        
+        String testInfo = (nextTest != null) 
+            ? nextTest.getTestName() + " (" + new java.text.SimpleDateFormat("dd MMM").format(nextTest.getTestDate()) + ")"
+            : "No upcoming tests";
+
+        String details = "<html><body style='width: 300px; padding: 15px; font-family: Segoe UI, SansSerif;'>"
             + "<h2 style='color:#1e3a8a; margin-top:0;'>Batch Details</h2>"
+            + "<hr style='border: 0; border-top: 1px solid #eee; margin-bottom: 15px;'>"
             + "<b>Batch Name:</b> " + b.getBatchName() + "<br><br>"
             + "<b>Teacher:</b> " + tName + "<br><br>"
-            + "<b>Total Students:</b> " + studentCount + "<br><br>"
             + "<b>Schedule:</b> " + day + " " + slot + "<br><br>"
-            + "<b>Mode:</b> " + (b.getMode() != null ? b.getMode() : "Offline")
+            + "<b>Mode:</b> " + (b.getMode() != null ? b.getMode() : "Offline") + "<br><br>"
+            + ( "Online".equalsIgnoreCase(b.getMode()) ? "<b>Meeting Link:</b> <a href='#'>" + (b.getMeetingLink() != null ? b.getMeetingLink() : "NULL") + "</a><br><br>" : "" )
+            + "<b>Upcoming Test:</b> <span style='color:#e67e22;'><b>" + testInfo + "</b></span>"
             + "</body></html>";
             
         JOptionPane.showMessageDialog(this, new JLabel(details), "Batch Details", JOptionPane.INFORMATION_MESSAGE);
@@ -204,7 +310,7 @@ public class TimetablePanel extends JPanel {
         dao.TeacherDAO tDAO = new dao.TeacherDAO();
         StringBuilder sb = new StringBuilder();
         sb.append("<html><body style='width: 300px; padding: 10px; font-family: SansSerif;'>");
-        sb.append("<h2 style='color:#dc2626; margin-top:0;'>⚠ Schedule Conflict Detected</h2>");
+        sb.append("<h2 style='color:#dc2626; margin-top:0;'>⚠ Two Batches Detected</h2>");
         sb.append("<b>Time Slot:</b> ").append(slot).append("<br>");
         sb.append("<b>Day:</b> ").append(day).append("<br><br>");
         sb.append("<b>Conflicting Batches:</b><br><br>");

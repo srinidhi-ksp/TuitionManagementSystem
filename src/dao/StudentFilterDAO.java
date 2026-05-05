@@ -111,7 +111,10 @@ public class StudentFilterDAO {
 
             // Filter by city
             if (city != null && !city.isEmpty() && !"All".equals(city)) {
-                filters.add(Filters.eq("city", city));
+                filters.add(Filters.or(
+                    Filters.eq("city", city),
+                    Filters.eq("address", city)
+                ));
             }
 
             // Filter by search term (name or ID)
@@ -206,12 +209,20 @@ public class StudentFilterDAO {
         if (studentCollection == null) return cities;
 
         try {
-            List<String> distinctValues = studentCollection.distinct("city", String.class).into(new ArrayList<>());
-            for (String val : distinctValues) {
-                if (val != null && !val.isEmpty()) {
-                    cities.add(val);
+            Set<String> uniqueCities = new HashSet<>();
+            List<String> distinctCities = studentCollection.distinct("city", String.class).into(new ArrayList<>());
+            for (String val : distinctCities) {
+                if (val != null && !val.trim().isEmpty()) {
+                    uniqueCities.add(val.trim());
                 }
             }
+            List<String> distinctAddresses = studentCollection.distinct("address", String.class).into(new ArrayList<>());
+            for (String val : distinctAddresses) {
+                if (val != null && !val.trim().isEmpty()) {
+                    uniqueCities.add(val.trim());
+                }
+            }
+            cities.addAll(uniqueCities);
             java.util.Collections.sort(cities);
         } catch (Exception e) {
             System.err.println("[StudentFilterDAO] Error fetching cities: " + e.getMessage());

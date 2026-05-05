@@ -98,7 +98,8 @@ public class ParentPortalService {
         
         // 1. Fee Due
         Map<String, Object> fees = feeService.getFeeSummary(studentUserId);
-        double pending = (double) fees.get("pendingAmount");
+        Object pendingObj = fees.get("pendingAmount");
+        double pending = (pendingObj instanceof Number) ? ((Number) pendingObj).doubleValue() : 0.0;
         if (pending > 0) {
             notes.add("⚠️ Fee Due: ₹" + pending + " pending. Please pay soon.");
         }
