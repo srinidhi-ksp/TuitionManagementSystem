@@ -151,6 +151,7 @@ public class BatchManagementFrame extends JPanel {
         JTextField linkField  = styledField();
         JComboBox<String> modeCombo = new JComboBox<>(new String[]{"Select Mode", "Online", "Offline"});
         JComboBox<String> classLevelCombo = new JComboBox<>(new String[]{"Select Class", "Class 10", "Class 11", "Class 12"});
+        JComboBox<String> dayCombo = new JComboBox<>(new String[]{"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"});
 
         if (isEditMode) {
             nameField.setText(editTarget.getBatchName());
@@ -166,6 +167,9 @@ public class BatchManagementFrame extends JPanel {
             
             if (editTarget.getStartTime() != null) startPicker.setTime(editTarget.getStartTime());
             if (editTarget.getEndTime() != null) endPicker.setTime(editTarget.getEndTime());
+            
+            String existingDay = util.ScheduleConflictValidator.extractDayFromTiming(editTarget.getTiming());
+            if (existingDay != null) dayCombo.setSelectedItem(existingDay);
         } else {
             Calendar cal = Calendar.getInstance();
             cal.set(Calendar.HOUR_OF_DAY, 9);
@@ -180,6 +184,7 @@ public class BatchManagementFrame extends JPanel {
         form.add(formRow("Subject",             subjectCombo));
         form.add(formRow("Assigned Teacher",    teacherCombo));
         form.add(formRow("Class Mode",          modeCombo));
+        form.add(formRow("Day of Week",         dayCombo));
         form.add(formRow("Start Time",          startPicker));
         form.add(formRow("End Time",            endPicker));
         form.add(formRow("Meeting Link (opt.)", linkField));
@@ -207,6 +212,35 @@ public class BatchManagementFrame extends JPanel {
                     return; // Stop saving if validation fails
                 }
 
+                // ===== CHECK TEACHER SCHEDULE CONFLICT =====
+                String selT = teacherCombo.getSelectedItem().toString();
+                String teacherId = selT.contains(" – ") ? selT.split(" – ")[0] : null;
+                
+                if (teacherId != null) {
+                    // Extract day and time from time pickers
+                    // Assuming timing is stored as "MON 09:00 - 11:00" format
+                    String startTimeStr = startPicker.getTimeString();
+                    String endTimeStr = endPicker.getTimeString();
+                    String day = dayCombo.getSelectedItem().toString();
+                    
+                    util.ScheduleConflictValidator.ConflictInfo conflict = 
+                        util.ScheduleConflictValidator.checkTeacherConflict(
+                            teacherId, day, startTimeStr, endTimeStr,
+                            isEditMode ? editTarget.getBatchId() : null
+                        );
+                    
+                    if (conflict != null) {
+                        JOptionPane.showMessageDialog(dialog,
+                            "⚠️ Schedule Conflict!\n\n" +
+                            "This teacher is already assigned to another batch at this time.\n\n" +
+                            "Conflicting Batch:\n" +
+                            conflict.getFormattedMessage() + "\n\n" +
+                            "Please choose a different time.",
+                            "Schedule Conflict", JOptionPane.WARNING_MESSAGE);
+                        return; // Stop saving
+                    }
+                }
+
                 // ===== VALIDATION PASSED - SAVE DATA =====
                 Batch b = isEditMode ? editTarget : new Batch();
                 if (!isEditMode) b.setBatchId((int)(System.currentTimeMillis() % 100000));
@@ -215,13 +249,20 @@ public class BatchManagementFrame extends JPanel {
 
                 String selS = subjectCombo.getSelectedItem().toString();
                 if (selS.contains(" – ")) b.setSubjectId(Integer.parseInt(selS.split(" – ")[0]));
-                String selT = teacherCombo.getSelectedItem().toString();
                 if (selT.contains(" – ")) b.setTeacherUserId(selT.split(" – ")[0]);
 
                 b.setClassMode(modeCombo.getSelectedItem().toString());
                 b.setStartTime(startPicker.getTime());
                 b.setEndTime(endPicker.getTime());
-                b.setTiming(startPicker.getTimeString() + " - " + endPicker.getTimeString());
+                String day = dayCombo.getSelectedItem().toString();
+                String startT = startPicker.getTimeString();
+                String endT = endPicker.getTimeString();
+                b.setTiming(day + " " + startT + " - " + endT);
+                
+                java.util.List<model.Schedule> scList = new java.util.ArrayList<>();
+                scList.add(new model.Schedule(day, startT, endT));
+                b.setSchedules(scList);
+                
                 b.setMeetingLink(linkField.getText().trim());
 
                 boolean ok = isEditMode ? new BatchDAO().updateBatch(b) : new BatchDAO().addBatch(b);

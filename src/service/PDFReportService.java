@@ -97,12 +97,14 @@ public class PDFReportService {
             Paragraph footer = new Paragraph("\n\nTeacher Signature: ____________________          Principal Signature: ____________________", FONT_BODY);
             footer.setSpacingBefore(50);
             document.add(footer);
-
-            document.close();
             return outputPath;
         } catch (Exception e) {
             e.printStackTrace();
             return null;
+        } finally {
+            if (document != null && document.isOpen()) {
+                document.close();
+            }
         }
     }
 
@@ -143,12 +145,14 @@ public class PDFReportService {
             Paragraph footer = new Paragraph("\nThis is a system-generated receipt.", FontFactory.getFont(FontFactory.HELVETICA, 8, BaseColor.GRAY));
             footer.setAlignment(Element.ALIGN_CENTER);
             document.add(footer);
-
-            document.close();
             return outputPath;
         } catch (Exception e) {
             e.printStackTrace();
             return null;
+        } finally {
+            if (document != null && document.isOpen()) {
+                document.close();
+            }
         }
     }
 

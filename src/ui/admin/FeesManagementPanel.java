@@ -18,6 +18,10 @@ import model.Student;
 import model.SubjectFeeDTO;
 import service.FeeService;
 import util.ThemeManager;
+import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.Updates;
+import db.DBConnection;
 
 /**
  * Fees & Payments Module - Redesigned
@@ -28,6 +32,7 @@ public class FeesManagementPanel extends JPanel {
     private static final Color COLOR_ACCENT  = new Color(59, 130, 246);
     private static final Color COLOR_SUCCESS = new Color(34, 197, 94);
     private static final Color COLOR_ERROR   = new Color(239, 68, 68);
+    private static final Color COLOR_PENDING = new Color(245, 158, 11); // Orange-600
 
     private FeeService feeService;
     private StudentDAO studentDAO;
@@ -74,7 +79,33 @@ public class FeesManagementPanel extends JPanel {
         titlePanel.add(title);
         titlePanel.add(sub);
 
+        JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 15));
+        rightPanel.setBackground(ThemeManager.BG);
+
+        JButton downloadFeesPDF = new JButton("📥 Download Fee Report PDF");
+        downloadFeesPDF.setBackground(new Color(59, 130, 246));
+        downloadFeesPDF.setForeground(Color.WHITE);
+        downloadFeesPDF.setFont(new Font("SansSerif", Font.BOLD, 13));
+        downloadFeesPDF.setFocusPainted(false);
+        downloadFeesPDF.setPreferredSize(new Dimension(220, 38));
+        downloadFeesPDF.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser();
+            chooser.setSelectedFile(new java.io.File("MRK_Fee_Report_" +
+                new java.text.SimpleDateFormat("MMM_yyyy").format(new java.util.Date()) + ".pdf"));
+            if (chooser.showSaveDialog(null) == JFileChooser.APPROVE_OPTION) {
+                service.FeeReportPDFService svc = new service.FeeReportPDFService();
+                String result = svc.generateFeeReport(chooser.getSelectedFile().getAbsolutePath());
+                if (result != null) {
+                    JOptionPane.showMessageDialog(null, "✅ Fee report saved!", "Success", JOptionPane.INFORMATION_MESSAGE);
+                } else {
+                    JOptionPane.showMessageDialog(null, "❌ Failed to generate PDF.", "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+        rightPanel.add(downloadFeesPDF);
+
         header.add(titlePanel, BorderLayout.WEST);
+        header.add(rightPanel, BorderLayout.EAST);
         return header;
     }
 
@@ -146,7 +177,7 @@ public class FeesManagementPanel extends JPanel {
         listTitle.setFont(new Font("SansSerif", Font.BOLD, 15));
         tableHeader.add(listTitle, BorderLayout.WEST);
 
-        analyticsFilterCombo = new JComboBox<>(new String[]{"All Students", "Paid Students", "Unpaid Students"});
+        analyticsFilterCombo = new JComboBox<>(new String[]{"All Students", "Paid Students", "Unpaid Students", "Partially Paid Students"});
         analyticsFilterCombo.setPreferredSize(new Dimension(180, 30));
         analyticsFilterCombo.addActionListener(e -> refreshAnalytics());
         tableHeader.add(analyticsFilterCombo, BorderLayout.EAST);
@@ -191,8 +222,11 @@ public class FeesManagementPanel extends JPanel {
                 setBorder(new EmptyBorder(0, 15, 0, 0));
                 
                 if (c == 3) { // Status column
-                    if ("PAID".equals(value)) setForeground(COLOR_SUCCESS);
-                    else if ("UNPAID".equals(value)) setForeground(COLOR_ERROR);
+                    String status = String.valueOf(value).toUpperCase();
+                    if (status.equals("PAID")) setForeground(COLOR_SUCCESS);
+                    else if (status.equals("PARTIAL")) setForeground(COLOR_PENDING); // orange
+                    else if (status.equals("UNPAID")) setForeground(COLOR_ERROR);
+                    else if (status.equals("PENDING")) setForeground(COLOR_PENDING);
                     else setForeground(ThemeManager.SUB_TEXT);
                     setFont(getFont().deriveFont(Font.BOLD));
                 }
@@ -209,18 +243,20 @@ public class FeesManagementPanel extends JPanel {
         long total = data.size();
         long paid = data.stream().filter(d -> "PAID".equals(d.get("status"))).count();
         long unpaid = data.stream().filter(d -> "UNPAID".equals(d.get("status"))).count();
+        long partial = data.stream().filter(d -> "PARTIAL".equals(d.get("status"))).count();
 
         totalStudentsCard.setText(String.valueOf(total));
         paidStudentsCard.setText(String.valueOf(paid));
-        unpaidStudentsCard.setText(String.valueOf(unpaid));
+        unpaidStudentsCard.setText(String.valueOf(unpaid + partial)); // Group partial with unpaid for summary color or split if needed
         
-        chartPanel.updateData(paid, unpaid);
+        chartPanel.updateData(paid, unpaid + partial);
 
         analyticsModel.setRowCount(0);
         for (Map<String, Object> d : data) {
             String status = (String) d.get("status");
             if ("Paid Students".equals(filter) && !"PAID".equals(status)) continue;
             if ("Unpaid Students".equals(filter) && !"UNPAID".equals(status)) continue;
+            if ("Partially Paid Students".equals(filter) && !"PARTIAL".equals(status)) continue;
             
             analyticsModel.addRow(new Object[]{
                 d.get("name"),
@@ -238,9 +274,9 @@ public class FeesManagementPanel extends JPanel {
         panel.setBorder(new EmptyBorder(20, 0, 0, 0));
 
         // 1. Initialize models first
-        String[] cols = {"Subject", "Monthly Fee", "Status", "Action"};
+        String[] cols = {"Subject", "Monthly Fee", "Method", "Status", "Action"};
         managementModel = new DefaultTableModel(cols, 0) {
-            @Override public boolean isCellEditable(int r, int c) { return c == 3; }
+            @Override public boolean isCellEditable(int r, int c) { return c == 4; }
         };
         managementTable = new JTable(managementModel);
         styleManagementTable(managementTable);
@@ -318,15 +354,18 @@ public class FeesManagementPanel extends JPanel {
                 setForeground(ThemeManager.TEXT);
                 setBorder(new EmptyBorder(0, 15, 0, 0));
                 
-                if (c == 2) {
-                    if ("PAID".equals(value)) setForeground(COLOR_SUCCESS);
-                    else setForeground(COLOR_ERROR);
+                if (c == 3) {
+                    String status = String.valueOf(value).toUpperCase();
+                    if (status.equals("PAID") || status.equals("SUCCESS")) setForeground(COLOR_SUCCESS);
+                    else if (status.equals("UNPAID")) setForeground(COLOR_ERROR);
+                    else if (status.equals("PENDING") || status.equals("REQUESTED")) setForeground(COLOR_PENDING);
+                    else setForeground(ThemeManager.SUB_TEXT);
                     setFont(getFont().deriveFont(Font.BOLD));
                 }
                 return comp;
             }
         };
-        for (int i = 0; i < 3; i++) t.getColumnModel().getColumn(i).setCellRenderer(renderer);
+        for (int i = 0; i < 4; i++) t.getColumnModel().getColumn(i).setCellRenderer(renderer);
         
         // Add "Pay Now" button functionality here if needed (omitted for brevity, assume similar to original)
     }
@@ -358,21 +397,87 @@ public class FeesManagementPanel extends JPanel {
         
         String status = (String) summary.get("status");
         statusCard.setText(status);
-        statusCard.setForeground("PAID".equals(status) ? COLOR_SUCCESS : COLOR_ERROR);
+        
+        switch (status) {
+            case "PAID":    statusCard.setForeground(COLOR_SUCCESS); break;
+            case "PARTIAL": statusCard.setForeground(COLOR_PENDING); break; // orange
+            case "PENDING": statusCard.setForeground(COLOR_PENDING); break; // orange
+            default:        statusCard.setForeground(COLOR_ERROR);   break; // UNPAID = red
+        }
 
         if ("NO_ENROLLMENT".equals(status)) {
             managementModel.addRow(new Object[]{"NO ENROLLMENT FOUND", "--", "--", "--"});
             return;
         }
 
+        double pendingAmt = (double) summary.get("pendingAmount");
+
         for (SubjectFeeDTO f : details) {
+            boolean canPay = "REQUESTED".equalsIgnoreCase(f.getDetailedStatus());
             managementModel.addRow(new Object[]{
                 f.getSubjectName(),
                 String.format("₹%.2f", f.getMonthlyFee()),
-                f.getPaymentStatus(),
-                "Pay Now"
+                f.getPaymentMethod(),
+                f.getDetailedStatus(),
+                canPay ? "Mark as Paid" : "—"
             });
         }
+
+        // Wire "Mark as Paid" button column
+        managementTable.getColumnModel().getColumn(4).setCellRenderer(new javax.swing.table.DefaultTableCellRenderer() {
+            @Override public Component getTableCellRendererComponent(JTable t, Object v, boolean sel, boolean foc, int r, int c) {
+                String val = v != null ? v.toString() : "";
+                if ("Mark as Paid".equals(val)) {
+                    JButton btn = new JButton("Mark as Paid \u2713");
+                    btn.setFont(new Font("SansSerif", Font.BOLD, 11));
+                    btn.setBackground(new Color(34, 197, 94)); btn.setForeground(Color.WHITE);
+                    btn.setOpaque(true); btn.setBorderPainted(false);
+                    return btn;
+                }
+                JLabel lbl = (JLabel) super.getTableCellRendererComponent(t, v, sel, foc, r, c);
+                lbl.setForeground(new Color(107, 122, 153));
+                lbl.setBorder(new EmptyBorder(0, 14, 0, 0));
+                return lbl;
+            }
+        });
+        managementTable.getColumnModel().getColumn(4).setCellEditor(
+            new javax.swing.DefaultCellEditor(new JTextField()) {
+                @Override public Component getTableCellEditorComponent(JTable t, Object v, boolean sel, int r, int c) {
+                    String val = v != null ? v.toString() : "";
+                    if ("Mark as Paid".equals(val)) {
+                        // Trigger payment and refresh
+                        SwingUtilities.invokeLater(() -> {
+                            String sId = studentIdMap.get((String) studentSelectCombo.getSelectedItem());
+                            SubjectFeeDTO fee = details.get(r);
+                            
+                            int confirm = JOptionPane.showConfirmDialog(FeesManagementPanel.this, 
+                                "Mark " + fee.getSubjectName() + " as PAID for " + sId + "?\nThis will update collections and reduce pending fees.", 
+                                "Confirm Payment Approval", JOptionPane.YES_NO_OPTION);
+                                
+                            if (confirm == JOptionPane.YES_OPTION) {
+                                boolean ok = new dao.PaymentDAO().markBatchAsPaid(sId, fee.getBatchId(), fee.getMonthlyFee());
+
+                                if (ok) {
+                                    JOptionPane.showMessageDialog(FeesManagementPanel.this,
+                                        "✓ Payment APPROVED for " + fee.getSubjectName());
+                                } else {
+                                    JOptionPane.showMessageDialog(FeesManagementPanel.this,
+                                        "Error processing approval.", "Error", JOptionPane.ERROR_MESSAGE);
+                                }
+                                
+                                loadStudentFees();
+                                refreshAnalytics(); // Force refresh of the analytics tab as well
+                                revalidate();
+                                repaint();
+                            }
+                        });
+                        fireEditingStopped();
+                    }
+                    return new JLabel(val);
+                }
+                @Override public Object getCellEditorValue() { return ""; }
+            });
+
     }
 
     // ─────────────────────────── UI COMPONENTS ───────────────────────────

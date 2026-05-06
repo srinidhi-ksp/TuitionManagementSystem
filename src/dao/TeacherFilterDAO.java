@@ -2,6 +2,8 @@ package dao;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.regex.Pattern;
 
 import org.bson.Document;
@@ -24,8 +26,10 @@ import model.Teacher;
 public class TeacherFilterDAO {
 
     private MongoCollection<Document> teacherCollection;
+    private dao.UserDAO userDAO;
 
     public TeacherFilterDAO() {
+        this.userDAO = new dao.UserDAO();
         MongoDatabase database = DBConnection.getDatabase();
         if (database != null) {
             teacherCollection = database.getCollection("teachers");
@@ -67,7 +71,10 @@ public class TeacherFilterDAO {
 
             // Filter by city
             if (city != null && !city.isEmpty() && !"All".equals(city)) {
-                filters.add(Filters.eq("city", city));
+                filters.add(Filters.or(
+                    Filters.eq("city", city),
+                    Filters.eq("address", city)
+                ));
             }
 
             // Filter by salary range
@@ -103,6 +110,7 @@ public class TeacherFilterDAO {
                 Document doc = cursor.next();
                 Teacher teacher = DocumentMapper.documentToTeacher(doc);
                 if (teacher != null) {
+                    enrichWithJoinDate(teacher, doc);
                     results.add(teacher);
                 }
             }
@@ -184,13 +192,20 @@ public class TeacherFilterDAO {
         if (teacherCollection == null) return cities;
 
         try {
-            List<String> distinctValues = teacherCollection.distinct("city", String.class)
-                .into(new ArrayList<>());
-            for (String val : distinctValues) {
-                if (val != null && !val.isEmpty()) {
-                    cities.add(val);
+            Set<String> uniqueCities = new HashSet<>();
+            List<String> distinctCities = teacherCollection.distinct("city", String.class).into(new ArrayList<>());
+            for (String val : distinctCities) {
+                if (val != null && !val.trim().isEmpty()) {
+                    uniqueCities.add(val.trim());
                 }
             }
+            List<String> distinctAddresses = teacherCollection.distinct("address", String.class).into(new ArrayList<>());
+            for (String val : distinctAddresses) {
+                if (val != null && !val.trim().isEmpty()) {
+                    uniqueCities.add(val.trim());
+                }
+            }
+            cities.addAll(uniqueCities);
             java.util.Collections.sort(cities);
         } catch (Exception e) {
             System.err.println("[TeacherFilterDAO] Error fetching cities: " + e.getMessage());
@@ -210,5 +225,24 @@ public class TeacherFilterDAO {
             System.err.println("[TeacherFilterDAO] Error counting teachers: " + e.getMessage());
         }
         return 0;
+    }
+
+    private void enrichWithJoinDate(Teacher t, Document doc) {
+        java.util.Date joinDate = null;
+        String userRefId = doc.getString("user_id");
+        if (userRefId != null && !userRefId.isEmpty()) {
+            joinDate = userDAO.getCreatedAt(userRefId);
+        }
+        if (joinDate == null && t.getEmail() != null) {
+            joinDate = userDAO.getCreatedAtByEmail(t.getEmail());
+        }
+        if (joinDate == null) {
+            joinDate = userDAO.getCreatedAt(t.getUserId());
+        }
+        if (joinDate != null) {
+            t.setJoinDate(new java.text.SimpleDateFormat("dd-MM-yyyy").format(joinDate));
+        } else {
+            t.setJoinDate("-");
+        }
     }
 }

@@ -18,7 +18,8 @@ javac -encoding UTF-8 -d bin -cp "%CLASSPATH%" %SOURCE_17% %TARGET_17% ^
   src\ui\admin\*.java ^
   src\ui\parent\*.java ^
   src\ui\student\*.java ^
-  src\ui\teacher\*.java
+  src\ui\teacher\*.java ^
+  src\ui\common\*.java
   
 if errorlevel 1 (
   echo Compilation failed!

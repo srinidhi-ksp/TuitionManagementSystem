@@ -8,8 +8,12 @@ public class SubjectFeeDTO {
     private String subjectId;
     private String subjectName;
     private double monthlyFee;
-    private String paymentStatus;  // PAID, UNPAID
+    private String paymentStatus;  // PAID, UNPAID, PENDING
     private int batchId;
+    private double paidAmount;
+    private double pendingAmount;
+    private String paymentMethod; // UPI, CARD, CASH_REQUEST
+    private String detailedStatus; // SUCCESS, REQUESTED
 
     // Constructors
     public SubjectFeeDTO() {}
@@ -27,6 +31,24 @@ public class SubjectFeeDTO {
         this.monthlyFee = monthlyFee;
         this.paymentStatus = paymentStatus;
         this.batchId = batchId;
+        this.paidAmount = 0.0;
+        this.pendingAmount = monthlyFee;
+    }
+    
+    public SubjectFeeDTO(String subjectId, String subjectName, double monthlyFee, String paymentStatus, int batchId, double paidAmount, double pendingAmount) {
+        this.subjectId = subjectId;
+        this.subjectName = subjectName;
+        this.monthlyFee = monthlyFee;
+        this.paymentStatus = paymentStatus;
+        this.batchId = batchId;
+        this.paidAmount = paidAmount;
+        this.pendingAmount = pendingAmount;
+    }
+
+    public SubjectFeeDTO(String subjectId, String subjectName, double monthlyFee, String paymentStatus, int batchId, double paidAmount, double pendingAmount, String method, String detailedStatus) {
+        this(subjectId, subjectName, monthlyFee, paymentStatus, batchId, paidAmount, pendingAmount);
+        this.paymentMethod = method;
+        this.detailedStatus = detailedStatus;
     }
 
     // Getters & Setters
@@ -70,6 +92,22 @@ public class SubjectFeeDTO {
         this.batchId = batchId;
     }
 
+    public double getPaidAmount() {
+        return paidAmount;
+    }
+
+    public void setPaidAmount(double paidAmount) {
+        this.paidAmount = paidAmount;
+    }
+
+    public double getPendingAmount() {
+        return pendingAmount;
+    }
+
+    public void setPendingAmount(double pendingAmount) {
+        this.pendingAmount = pendingAmount;
+    }
+
     @Override
     public String toString() {
         return "SubjectFeeDTO{" +
@@ -80,4 +118,10 @@ public class SubjectFeeDTO {
                 ", batchId=" + batchId +
                 '}';
     }
+
+    public String getPaymentMethod() { return paymentMethod != null ? paymentMethod : "—"; }
+    public void setPaymentMethod(String paymentMethod) { this.paymentMethod = paymentMethod; }
+
+    public String getDetailedStatus() { return detailedStatus != null ? detailedStatus : "—"; }
+    public void setDetailedStatus(String detailedStatus) { this.detailedStatus = detailedStatus; }
 }

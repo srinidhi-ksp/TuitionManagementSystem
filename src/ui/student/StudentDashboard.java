@@ -35,7 +35,9 @@ public class StudentDashboard extends JFrame {
         mainContentPanel.add(new MyBatchesPanel(), "My Batches");
         mainContentPanel.add(new SyllabusProgressPanel(), "Syllabus Progress");
         mainContentPanel.add(new AttendancePanel(), "Attendance");
+        mainContentPanel.add(new StudentMarksPanel(), "Test Results");
         mainContentPanel.add(new FeesPanel(), "Fees & Payments");
+        mainContentPanel.add(new ui.common.TimetablePanel("STUDENT", user.getUserId()), "Timetable");
         mainContentPanel.add(new ProfilePanel(), "Profile");
 
         add(createTopNavbar(), BorderLayout.NORTH);
@@ -139,7 +141,7 @@ public class StudentDashboard extends JFrame {
     private static final Color ACCENT      = new Color(50, 150, 250);
     private JButton activeBtn = null;
 
-    private JPanel createSidebar() {
+    private JScrollPane createSidebar() {
         sidebarPanel = new JPanel();
         sidebarPanel.setName("sidebar");
         sidebarPanel.setLayout(new BoxLayout(sidebarPanel, BoxLayout.Y_AXIS));
@@ -157,9 +159,9 @@ public class StudentDashboard extends JFrame {
 
         String[] menuItems = {
             "Dashboard", "My Subjects", "My Batches", "Syllabus Progress", 
-            "Attendance", "Fees & Payments", "Profile"
+            "Attendance", "Test Results", "Fees & Payments", "Timetable", "Profile"
         };
-        String[] icons = {"🏠", "📚", "📋", "📈", "📊", "💰", "👤"};
+        String[] icons = {"🏠", "📚", "📋", "📈", "📊", "📈", "💰", "📅", "👤"};
 
         for (int i = 0; i < menuItems.length; i++) {
             final String item = menuItems[i];
@@ -217,7 +219,12 @@ public class StudentDashboard extends JFrame {
         sidebarPanel.add(logoutBtn);
         sidebarPanel.add(Box.createRigidArea(new Dimension(0, 20)));
 
-        return sidebarPanel;
+        JScrollPane sidebarScroll = new JScrollPane(sidebarPanel);
+        sidebarScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        sidebarScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        sidebarScroll.setBorder(null);
+
+        return sidebarScroll;
     }
 
     private JButton createLogoutButton() {

@@ -9,6 +9,10 @@ import javax.swing.border.EmptyBorder;
 import dao.TeacherDAO;
 import model.Teacher;
 import model.User;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.model.Filters;
+import org.bson.Document;
+import java.util.Date;
 
 /**
  * Admin Profile Panel
@@ -32,9 +36,7 @@ public class AdminProfilePanel extends JPanel {
         this.currentUser = user;
         this.teacherDAO = new TeacherDAO();
         
-        System.out.println("[AdminProfilePanel] Initializing for User ID: " + user.getUserId());
-        this.teacher = teacherDAO.getByUserId(user.getUserId());
-        System.out.println("[AdminProfilePanel] Teacher data found: " + teacher);
+        loadAdminData();
 
         setLayout(new BorderLayout());
         setBackground(PAGE_BG);
@@ -168,17 +170,17 @@ public class AdminProfilePanel extends JPanel {
         String teacherId = (teacher != null && teacher.getUserId() != null) ? teacher.getUserId() : currentUser.getUserId();
         map.put("Teacher ID:", teacherId);
         
-        String spec = (teacher != null && teacher.getSpecialization() != null) ? teacher.getSpecialization() : "N/A";
+        String spec = (teacher != null && teacher.getSpecialization() != null) ? teacher.getSpecialization() : "-";
         map.put("Specialization:", spec);
         
         String quals = (teacher != null && teacher.getQualifications() != null && !teacher.getQualifications().isEmpty()) 
-                       ? String.join(", ", teacher.getQualifications()) : "N/A";
+                       ? String.join(", ", teacher.getQualifications()) : "-";
         map.put("Qualifications:", quals);
         
         // Use experience_years from database if available
-        String experience = "N/A";
-        if (teacher != null && teacher.getExperienceYears() != null && teacher.getExperienceYears() > 0) {
-            experience = teacher.getExperienceYears() + " years";
+        String experience = "-";
+        if (teacher != null && teacher.getExperience() > 0) {
+            experience = teacher.getExperience() + " years";
         } else if (currentUser.getCreatedAt() != null) {
             // Fallback calculation from join date if experience_years is missing
             java.time.LocalDate joinDate = currentUser.getCreatedAt().toInstant()
@@ -198,10 +200,11 @@ public class AdminProfilePanel extends JPanel {
         }
         map.put("Experience:", experience);
 
-        String joinDateStr = "N/A";
-        java.util.Date joinDateObj = (teacher != null && teacher.getJoinDate() != null) ? teacher.getJoinDate() : currentUser.getCreatedAt();
-        if (joinDateObj != null) {
-            joinDateStr = new java.text.SimpleDateFormat("dd MMM yyyy").format(joinDateObj);
+        String joinDateStr = "-";
+        if (teacher != null && teacher.getJoinDate() != null && !teacher.getJoinDate().equals("-")) {
+            joinDateStr = teacher.getJoinDate();
+        } else if (currentUser.getCreatedAt() != null) {
+            joinDateStr = new java.text.SimpleDateFormat("dd MMM yyyy").format(currentUser.getCreatedAt());
         }
         map.put("Join Date:", joinDateStr);
         
@@ -219,6 +222,52 @@ public class AdminProfilePanel extends JPanel {
     }
 
     private String safe(String value) {
-        return (value == null || value.trim().isEmpty() || value.equalsIgnoreCase("null")) ? "N/A" : value;
+        return (value == null || value.trim().isEmpty() || value.equalsIgnoreCase("null") || value.equals("N/A")) ? "-" : value;
+    }
+
+    private void loadAdminData() {
+        if (currentUser == null) return;
+        
+        String adminId = currentUser.getUserId();
+        System.out.println("[AdminProfilePanel] 🔍 Full merge for Admin: " + adminId);
+        
+        try {
+            com.mongodb.client.MongoDatabase database = db.DBConnection.getDatabase();
+            
+            // 1. Get User Data
+            MongoCollection<Document> userCol = database.getCollection("users");
+            Document user = userCol.find(Filters.eq("_id", adminId)).first();
+
+            if (user != null) {
+                currentUser.setEmail(user.getString("email"));
+                
+                Object phoneObj = user.get("phone");
+                currentUser.setPhone(phoneObj != null ? phoneObj.toString() : "-");
+
+                List<String> roles = user.getList("roles", String.class);
+                if (roles != null && !roles.isEmpty()) {
+                    currentUser.setRoles(roles);
+                    currentUser.setRole(roles.get(0));
+                } else {
+                    Object roleObj = user.get("role");
+                    if (roleObj != null) currentUser.setRole(roleObj.toString());
+                }
+                System.out.println("[AdminProfilePanel] ✅ User data loaded: " + currentUser.getEmail());
+            }
+            
+            // 2. Get Teacher Data (if admin is also a teacher)
+            MongoCollection<Document> teacherCol = database.getCollection("teachers");
+            Document teacherDoc = teacherCol.find(Filters.eq("_id", adminId)).first();
+
+            if (teacherDoc != null) {
+                this.teacher = db.DocumentMapper.documentToTeacher(teacherDoc);
+                System.out.println("[AdminProfilePanel] ✅ Teacher details merged: " + teacher.getSpecialization());
+                System.out.println("[AdminProfilePanel] RAW DOC: " + teacherDoc.toJson());
+            }
+            
+        } catch (Exception e) {
+            System.err.println("[AdminProfilePanel] ❌ Error merging admin data: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 }

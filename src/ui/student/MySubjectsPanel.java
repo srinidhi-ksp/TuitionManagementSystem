@@ -76,9 +76,47 @@ public class MySubjectsPanel extends JPanel {
         JButton btn = new JButton("View Syllabus");
         btn.setBackground(new Color(245, 245, 250));
         btn.setFocusPainted(false);
+        btn.addActionListener(e -> showSyllabusDialog(s));
         card.add(btn, BorderLayout.SOUTH);
 
         return card;
+    }
+
+    private void showSyllabusDialog(Subject s) {
+        JDialog dialog = new JDialog((JFrame)SwingUtilities.getWindowAncestor(this), s.getSubjectName() + " - Syllabus", true);
+        dialog.setSize(500, 400);
+        dialog.setLocationRelativeTo(this);
+        dialog.setLayout(new BorderLayout());
+        
+        String[] columns = {"ID", "Chapter Name", "Difficulty"};
+        javax.swing.table.DefaultTableModel model = new javax.swing.table.DefaultTableModel(columns, 0) {
+            public boolean isCellEditable(int r, int c) { return false; }
+        };
+        
+        if (s.getChapters() != null && !s.getChapters().isEmpty()) {
+            for (Subject.Chapter c : s.getChapters()) {
+                model.addRow(new Object[]{c.getChapterId(), c.getName(), c.getDifficulty()});
+            }
+        } else {
+            // Fetch dynamically just in case it wasn't loaded
+            try {
+                Subject fromDb = new SubjectDAO().getSubjectById(s.getSubjectId());
+                if (fromDb != null && fromDb.getChapters() != null) {
+                    for (Subject.Chapter c : fromDb.getChapters()) {
+                        model.addRow(new Object[]{c.getChapterId(), c.getName(), c.getDifficulty()});
+                    }
+                }
+            } catch (Exception ex) {}
+        }
+        
+        JTable table = new JTable(model);
+        table.setRowHeight(30);
+        table.getTableHeader().setFont(new Font("Arial", Font.BOLD, 12));
+        table.getTableHeader().setOpaque(false);
+        table.getTableHeader().setBackground(new Color(240, 240, 240));
+        
+        dialog.add(new JScrollPane(table), BorderLayout.CENTER);
+        dialog.setVisible(true);
     }
 
     private void loadSubjectsAsync() {

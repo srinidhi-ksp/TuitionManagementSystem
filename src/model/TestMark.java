@@ -10,6 +10,8 @@ public class TestMark {
     private String subjectName;
     private int maxMarks;
     private int marksObtained;
+    private double percentage;
+    private String grade;
     private String remarks;
 
     public int getMarkId() { return markId; }
@@ -32,6 +34,12 @@ public class TestMark {
 
     public int getMarksObtained() { return marksObtained; }
     public void setMarksObtained(int marksObtained) { this.marksObtained = marksObtained; }
+
+    public double getPercentage() { return percentage; }
+    public void setPercentage(double percentage) { this.percentage = percentage; }
+
+    public String getGrade() { return grade; }
+    public void setGrade(String grade) { this.grade = grade; }
 
     public String getRemarks() { return remarks; }
     public void setRemarks(String remarks) { this.remarks = remarks; }

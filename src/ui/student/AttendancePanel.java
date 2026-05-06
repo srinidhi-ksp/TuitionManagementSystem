@@ -45,6 +45,20 @@ public class AttendancePanel extends JPanel {
         scrollPane.setBorder(BorderFactory.createLineBorder(new Color(230,230,230)));
         scrollPane.getViewport().setBackground(Color.WHITE);
         add(scrollPane, BorderLayout.CENTER);
+        
+        attTable.getColumnModel().getColumn(1).setCellRenderer(new javax.swing.table.DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+                JLabel l = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                String status = value != null ? value.toString() : "";
+                if ("PRESENT".equalsIgnoreCase(status)) l.setForeground(new Color(34, 197, 94));
+                else if ("ABSENT".equalsIgnoreCase(status)) l.setForeground(new Color(239, 68, 68));
+                else if ("CANCELLED".equalsIgnoreCase(status)) l.setForeground(new Color(148, 163, 184));
+                else l.setForeground(new Color(245, 158, 11));
+                l.setFont(new Font("SansSerif", Font.BOLD, 13));
+                return l;
+            }
+        });
     }
 
     private void loadAttendanceData() {

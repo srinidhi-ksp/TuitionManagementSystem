@@ -104,7 +104,7 @@ public class OverviewPanel extends JPanel {
         titleLabel.setFont(new Font("SansSerif", Font.BOLD, 10));
         
         JLabel valueLabel = new JLabel(value);
-        valueLabel.setFont(new Font("SansSerif", Font.BOLD, 24));
+        valueLabel.setFont(new Font("SansSerif", Font.BOLD, value.length() > 8 ? 16 : 24));
         valueLabel.setForeground(new Color(26, 35, 64));
         
         textPanel.add(titleLabel);
@@ -114,7 +114,7 @@ public class OverviewPanel extends JPanel {
         return card;
     }
     
-    private JPanel createNotificationCard() {
+    private JPanel createNotificationCard(List<String> notices) {
         JPanel card = new JPanel(new BorderLayout());
         card.setBackground(Color.WHITE);
         card.setBorder(BorderFactory.createCompoundBorder(
@@ -132,21 +132,22 @@ public class OverviewPanel extends JPanel {
         list.setLayout(new BoxLayout(list, BoxLayout.Y_AXIS));
         list.setBackground(Color.WHITE);
         
-        String[] notices = {
-            "• Welcome to the new Student Portal!",
-            "• Check 'Fees & Payments' for upcoming dues.",
-            "• Your attendance record is being updated."
-        };
-
-        for (String n : notices) {
-            JLabel lbl = new JLabel(n);
-            lbl.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        if (notices == null || notices.isEmpty()) {
+            JLabel lbl = new JLabel("No new notifications");
+            lbl.setFont(new Font("SansSerif", Font.ITALIC, 13));
             lbl.setForeground(new Color(107, 122, 153));
-            lbl.setBorder(new EmptyBorder(4, 0, 4, 0));
             list.add(lbl);
+        } else {
+            for (String n : notices) {
+                JLabel lbl = new JLabel("• " + n);
+                lbl.setFont(new Font("SansSerif", Font.PLAIN, 13));
+                lbl.setForeground(new Color(107, 122, 153));
+                lbl.setBorder(new EmptyBorder(4, 0, 4, 0));
+                list.add(lbl);
+            }
         }
         
-        card.add(list, BorderLayout.CENTER);
+        card.add(new JScrollPane(list), BorderLayout.CENTER);
         return card;
     }
 
@@ -188,45 +189,49 @@ public class OverviewPanel extends JPanel {
     }
 
     private void loadOverviewDataAsync() {
-        new SwingWorker<List<Batch>, Void>() {
+        new SwingWorker<java.util.Map<String, Object>, Void>() {
             @Override
-            protected List<Batch> doInBackground() throws Exception {
-                String userIdFromSession = util.SessionManager.getInstance().getUserId();
-                System.out.println("[OverviewPanel] 🔄 Loading dashboard for user: " + userIdFromSession);
+            protected java.util.Map<String, Object> doInBackground() throws Exception {
+                String userId = util.SessionManager.getInstance().getUserId();
+                if (userId == null) return null;
                 
-                if (userIdFromSession == null) {
-                    System.err.println("[OverviewPanel] ❌ User ID is null!");
-                    return new java.util.ArrayList<>();
-                }
+                // EXACT Step 4 logic: Get student dashboard
+                model.StudentDashboard dashboard = studentService.getDashboard(userId);
                 
-                // studentService.getActiveBatches() will internally resolve user_id → student_id
-                List<Batch> batches = studentService.getActiveBatches(userIdFromSession);
-                System.out.println("[OverviewPanel] ✅ Found " + (batches != null ? batches.size() : 0) + " active batches");
+                // Additional data for the UI
+                java.util.Map<String, Object> data = new java.util.HashMap<>();
+                data.put("dashboard", dashboard);
+                data.put("batches", studentService.getActiveBatches(userId));
                 
-                return batches;
+                service.ParentPortalService ppService = new service.ParentPortalService();
+                data.put("notifications", ppService.getNotifications(userId));
+                
+                return data;
             }
 
             @Override
             protected void done() {
                 try {
-                    List<Batch> enrolled = get();
-                    int batchCount = enrolled != null ? enrolled.size() : 0;
-                    
-                    System.out.println("[OverviewPanel] Updating stats with " + batchCount + " batches");
-                    
-                    String userName = util.SessionManager.getInstance().getUserName();
-                    title.setText("Welcome back, " + (userName != null ? userName : "Student") + "!");
+                    java.util.Map<String, Object> data = get();
+                    if (data == null) return;
+
+                    model.StudentDashboard dash = (model.StudentDashboard) data.get("dashboard");
+                    List<Batch> enrolled = (List<Batch>) data.get("batches");
+                    List<String> notices = (List<String>) data.get("notifications");
+
+                    title.setText("Welcome back, " + (dash.getName() != null ? dash.getName() : "Student") + "!");
 
                     statsPanel.removeAll();
-                    statsPanel.add(createModernStatCard("Active Batches", String.valueOf(batchCount), new Color(74, 144, 226)));
-                    statsPanel.add(createModernStatCard("Subjects", String.valueOf(batchCount), new Color(52, 211, 153)));
-                    statsPanel.add(createModernStatCard("Attendance", "92%", new Color(167, 139, 250)));
-                    statsPanel.add(createModernStatCard("Fees Status", batchCount > 0 ? "PAID" : "N/A", new Color(251, 146, 60)));
+                    statsPanel.add(createModernStatCard("Active Batches", String.valueOf(dash.getBatchCount()), new Color(74, 144, 226)));
+                    statsPanel.add(createModernStatCard("Total Fees", String.format("₹%.0f", dash.getTotalFees()), new Color(52, 211, 153)));
+                    statsPanel.add(createModernStatCard("Paid Amount", String.format("₹%.0f", dash.getPaidAmount()), new Color(167, 139, 250)));
+                    statsPanel.add(createModernStatCard("Pending", String.format("₹%.0f", dash.getPending()), new Color(251, 146, 60)));
                     
                     lowerPanel.removeAll();
-                    lowerPanel.add(createNotificationCard());
+                    lowerPanel.add(createNotificationCard(notices));
                     lowerPanel.add(createUpcomingClassesCard(enrolled));
                     
+                    // Step 6: Force Refresh
                     revalidate();
                     repaint();
                 } catch (Exception e) {

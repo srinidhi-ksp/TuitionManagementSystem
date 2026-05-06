@@ -67,12 +67,73 @@ public class ParentDashboard extends JFrame {
         mainContentPanel.add(new ParentAttendancePanel(), "Attendance");
         mainContentPanel.add(new ParentProfilePanel(), "Profile");
         
-        // Notifications can be part of Overview, but we keep the menu item
-        mainContentPanel.add(new ParentOverviewPanel(), "Notifications");
+        // Notifications
+        mainContentPanel.add(new ParentNotificationPanel(), "Notifications");
 
         add(createTopNavbar(), BorderLayout.NORTH);
         add(createSidebar(), BorderLayout.WEST);
         add(mainContentPanel, BorderLayout.CENTER);
+        
+        checkAndNotifyOverdueFees();
+    }
+
+    private void checkAndNotifyOverdueFees() {
+        new javax.swing.SwingWorker<Void, Void>() {
+            @Override protected Void doInBackground() {
+                try {
+                    com.mongodb.client.MongoDatabase database = db.DBConnection.getDatabase();
+                    com.mongodb.client.FindIterable<org.bson.Document> pendingPayments = 
+                        database.getCollection("payments").find(
+                            com.mongodb.client.model.Filters.in(
+                                "status", "PENDING", "PARTIAL"
+                            )
+                        );
+                    
+                    for (org.bson.Document payment : pendingPayments) {
+                        Integer enrollmentId = payment.getInteger("enrollment_id");
+                        if (enrollmentId == null) continue; // safety check
+                        
+                        double amount = payment.get("amount") instanceof Number ?
+                                        ((Number) payment.get("amount")).doubleValue() : 0.0;
+                        
+                        org.bson.Document enrollment = database.getCollection("enrollments").find(
+                            new org.bson.Document("_id", enrollmentId)
+                        ).first();
+                        if (enrollment == null) continue;
+                        
+                        String studentId = enrollment.getString("student_id");
+                        Integer batchId = enrollment.getInteger("batch_id");
+                        if (batchId == null) continue;
+                        
+                        org.bson.Document studentDoc = database.getCollection("students").find(
+                            new org.bson.Document("_id", studentId)
+                        ).first();
+                        if (studentDoc == null) continue;
+                        
+                        String parentId = studentDoc.getString("parent_user_id");
+                        if (parentId == null) {
+                            org.bson.Document parentEmbed = (org.bson.Document) studentDoc.get("parent");
+                            if (parentEmbed == null) continue;
+                            parentId = parentEmbed.getString("parent_id");
+                        }
+                        String studentName = studentDoc.getString("full_name");
+                        
+                        org.bson.Document batch = database.getCollection("batches").find(
+                            new org.bson.Document("_id", batchId)
+                        ).first();
+                        String batchName = batch != null ? 
+                                           batch.getString("batch_name") : "your batch";
+                        
+                        new service.NotificationService().notifyFeeOverdue(
+                            parentId, studentId, studentName, batchName, amount
+                        );
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                return null;
+            }
+        }.execute();
     }
 
     private JPanel createTopNavbar() {
@@ -171,7 +232,7 @@ public class ParentDashboard extends JFrame {
         btn.setFocusPainted(false);
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         btn.setHorizontalAlignment(SwingConstants.LEFT);
-        btn.setBorder(new EmptyBorder(0, 32, 0, 0));
+        btn.setBorder(new EmptyBorder(0, 24, 0, 10)); // Adjusted padding
 
         btn.addActionListener(e -> {
             if (activeBtn != null) activeBtn.setForeground(TEXT_SEC);

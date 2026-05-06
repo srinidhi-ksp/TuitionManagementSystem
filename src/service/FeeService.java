@@ -71,60 +71,81 @@ public class FeeService {
      */
     public List<SubjectFeeDTO> getStudentFeeDetails(String inputId) {
         String studentId = resolveStudentId(inputId);
-        System.out.println("\n[FeeService] Fetching fee details for student: " + studentId);
-        
+        System.out.println("\n[FeeService] getStudentFeeDetails() for: " + studentId);
+
         List<SubjectFeeDTO> feeDetails = new ArrayList<>();
-        
+
         try {
-            // STEP 1: Fetch ALL active enrollments
             List<Enrollment> enrollments = enrollmentDAO.getEnrollmentsByStudentId(studentId);
-            System.out.println("[FeeService] DEBUG - Enrollments found: " + enrollments.size());
+            System.out.println("[FeeService] Enrollments found: " + enrollments.size());
 
             if (enrollments.isEmpty()) {
-                System.out.println("[FeeService] ⚠️  No enrollments for student: " + studentId);
+                System.out.println("[FeeService] No enrollments for: " + studentId);
                 return feeDetails;
             }
 
-            // STEP 2: Collect Batch IDs
-            List<Integer> batchIds = new ArrayList<>();
-            for (Enrollment e : enrollments) {
-                batchIds.add(e.getBatchId());
-            }
-            System.out.println("[FeeService] DEBUG - Batch IDs: " + batchIds);
-
-            // STEP 3 & 4: Process each enrollment (allowing duplicates of same subject in different batches)
             for (Enrollment enrollment : enrollments) {
                 Batch batch = batchDAO.getBatchById(enrollment.getBatchId());
-                
-                if (batch != null) {
-                    Subject subject = subjectDAO.getSubjectById(batch.getSubjectId());
-                    
-                    if (subject != null) {
-                        // Check payment status in payments collection
-                        boolean isPaid = paymentDAO.isSubjectPaid(studentId, String.valueOf(subject.getSubjectId()));
-                        String status = isPaid ? "PAID" : "UNPAID";
-                        
-                        // Use "Subject Name (Batch Name)" for clear identification
-                        String displayName = subject.getSubjectName() + " (" + batch.getBatchName() + ")";
-                        
-                        SubjectFeeDTO dto = new SubjectFeeDTO(
-                            String.valueOf(subject.getSubjectId()), 
-                            displayName, 
-                            subject.getMonthlyFee(), 
-                            status,
-                            batch.getBatchId()
-                        );
-                        feeDetails.add(dto);
-                        
-                        System.out.println("[FeeService]   -> Added: " + displayName + " | Status: " + status);
-                    }
+                if (batch == null) continue;
+
+                Subject subject = subjectDAO.getSubjectById(batch.getSubjectId());
+                if (subject == null) continue;
+
+                double monthlyFee = subject.getMonthlyFee();
+
+                // ── CORE FIX: Use getBatchPaymentSummary() directly (same as FeeAnalyticsDAO approach) ──
+                java.util.Map<String, Object> paySummary =
+                    paymentDAO.getBatchPaymentSummary(studentId, batch.getBatchId());
+
+                double paidAmount   = (Double) paySummary.get("totalPaid");
+                String rawStatus    = (String) paySummary.get("status");   // "SUCCESS", "REQUESTED", "UNPAID"
+                String method       = (String) paySummary.get("method");
+
+                double pendingAmount = monthlyFee - paidAmount;
+                if (pendingAmount < 0) pendingAmount = 0;
+
+                // Determine display status: PAID / PARTIAL / PENDING / UNPAID
+                String displayStatus;
+                String detailedStatus;
+
+                if (paidAmount >= monthlyFee) {
+                    displayStatus  = "PAID";
+                    detailedStatus = "SUCCESS";
+                } else if (paidAmount > 0 && pendingAmount > 0) {
+                    displayStatus  = "PARTIAL";
+                    detailedStatus = "PARTIAL";
+                } else if ("REQUESTED".equalsIgnoreCase(rawStatus)) {
+                    displayStatus  = "PENDING";
+                    detailedStatus = "REQUESTED";
+                } else {
+                    displayStatus  = "UNPAID";
+                    detailedStatus = "UNPAID";
                 }
+
+                String displayName = subject.getSubjectName() + " (" + batch.getBatchName() + ")";
+
+                SubjectFeeDTO dto = new SubjectFeeDTO(
+                    String.valueOf(subject.getSubjectId()),
+                    displayName,
+                    monthlyFee,
+                    displayStatus,
+                    batch.getBatchId(),
+                    paidAmount,
+                    pendingAmount,
+                    method,
+                    detailedStatus
+                );
+                feeDetails.add(dto);
+
+                System.out.println("[FeeService] -> " + displayName
+                    + " | monthlyFee=" + monthlyFee
+                    + " | paid=" + paidAmount
+                    + " | pending=" + pendingAmount
+                    + " | status=" + displayStatus);
             }
 
-            System.out.println("[FeeService] ✅ Final fee details size: " + feeDetails.size());
-            
         } catch (Exception e) {
-            System.err.println("[FeeService] ❌ Error fetching fee details: " + e.getMessage());
+            System.err.println("[FeeService] Error in getStudentFeeDetails: " + e.getMessage());
             e.printStackTrace();
         }
 
@@ -135,11 +156,20 @@ public class FeeService {
      * Calculate fee summary for a student
      */
     public Map<String, Object> getFeeSummary(String inputId) {
+        if (inputId == null) {
+            Map<String, Object> empty = new HashMap<>();
+            empty.put("totalFee", 0.0);
+            empty.put("paidAmount", 0.0);
+            empty.put("pendingAmount", 0.0);
+            empty.put("status", "NO_ENROLLMENT");
+            return empty;
+        }
+
         String studentId = resolveStudentId(inputId);
-        Map<String, Object> summary = new HashMap<>();
-        
         List<SubjectFeeDTO> feeDetails = getStudentFeeDetails(studentId);
-        
+
+        Map<String, Object> summary = new HashMap<>();
+
         if (feeDetails.isEmpty()) {
             summary.put("totalFee", 0.0);
             summary.put("paidAmount", 0.0);
@@ -148,92 +178,115 @@ public class FeeService {
             return summary;
         }
 
-        // STEP 7: Calculate totals
-        double totalFee = 0;
-        double paidAmount = 0;
-        int paidSubjects = 0;
+        double totalFee     = 0;
+        double paidAmount   = 0;
+        int paidSubjects    = 0;
+        int partialSubjects = 0;
+        int pendingSubjects = 0; // REQUESTED / awaiting admin approval
 
         for (SubjectFeeDTO fee : feeDetails) {
-            totalFee += fee.getMonthlyFee();
-            if ("PAID".equals(fee.getPaymentStatus())) {
-                paidAmount += fee.getMonthlyFee();
-                paidSubjects++;
-            }
+            totalFee   += fee.getMonthlyFee();
+            paidAmount += fee.getPaidAmount();
+
+            String s = fee.getPaymentStatus();
+            if ("PAID".equalsIgnoreCase(s))    paidSubjects++;
+            if ("PARTIAL".equalsIgnoreCase(s)) partialSubjects++;
+            if ("PENDING".equalsIgnoreCase(s)) pendingSubjects++;
         }
 
         double pendingAmount = totalFee - paidAmount;
+        if (pendingAmount < 0) pendingAmount = 0;
 
-        // STEP 8: Determine overall status
         String overallStatus;
-        if (paidSubjects == feeDetails.size()) {
+        if (pendingAmount == 0 && totalFee > 0) {
             overallStatus = "PAID";
-        } else if (paidSubjects > 0) {
+        } else if (partialSubjects > 0) {
             overallStatus = "PARTIAL";
+        } else if (pendingSubjects > 0) {
+            overallStatus = "PENDING";
         } else {
             overallStatus = "UNPAID";
         }
 
-        summary.put("totalFee", totalFee);
-        summary.put("paidAmount", paidAmount);
+        summary.put("totalFee",      totalFee);
+        summary.put("paidAmount",    paidAmount);
         summary.put("pendingAmount", pendingAmount);
-        summary.put("status", overallStatus);
+        summary.put("status",        overallStatus);
         summary.put("totalSubjects", feeDetails.size());
-        summary.put("paidSubjects", paidSubjects);
+        summary.put("paidSubjects",  paidSubjects);
 
-        System.out.println("[FeeService] Summary - Total: Rs. " + totalFee + 
-                         " | Paid: Rs. " + paidAmount + " | Pending: Rs. " + pendingAmount + 
-                         " | Status: " + overallStatus);
+        System.out.println("[FeeService] Summary for " + studentId
+            + " -> Total=" + totalFee + " Paid=" + paidAmount
+            + " Pending=" + pendingAmount + " Status=" + overallStatus);
 
         return summary;
     }
 
     /**
-     * Record a payment for a subject
+     * Record a payment for a specific batch
      */
-    public boolean recordPayment(String inputId, String subjectId, String paymentMode) {
+    public boolean recordPayment(String inputId, int batchId, String paymentMode) {
         String studentId = resolveStudentId(inputId);
-        System.out.println("\n[FeeService] Recording payment - Student: " + studentId + 
-                         " | Subject: " + subjectId + " | Mode: " + paymentMode);
-        
+        System.out.println("[FeeService] recordPayment() student=" + studentId + " batch=" + batchId);
+
         try {
-            // Get subject fee
-            int subjectIdInt = Integer.parseInt(subjectId);
-            Subject subject = subjectDAO.getSubjectById(subjectIdInt);
-            if (subject == null) {
-                System.err.println("[FeeService] Subject not found: " + subjectId);
-                return false;
+            // PRE-CHECK: Is this batch already fully paid? (same logic as FeeAnalyticsDAO)
+            java.util.Map<String, Object> existing = paymentDAO.getBatchPaymentSummary(studentId, batchId);
+            String existingRawStatus = (String) existing.get("status");
+
+            Batch batch = batchDAO.getBatchById(batchId);
+            if (batch == null) { System.err.println("[FeeService] Batch not found: " + batchId); return false; }
+
+            Subject subject = subjectDAO.getSubjectById(batch.getSubjectId());
+            if (subject == null) { System.err.println("[FeeService] Subject not found for batch: " + batchId); return false; }
+
+            double monthlyFee  = subject.getMonthlyFee();
+            double alreadyPaid = (Double) existing.get("totalPaid");
+
+            if (alreadyPaid >= monthlyFee) {
+                System.out.println("[FeeService] ⚠️ Already fully paid for batch " + batchId + ". Aborting.");
+                return false; // Caller must show "Fee already paid for this month"
             }
+
+            if ("REQUESTED".equalsIgnoreCase(existingRawStatus)) {
+                System.out.println("[FeeService] ⚠️ Payment already requested (pending admin approval) for batch " + batchId);
+                return false; // Caller must show "Payment pending admin approval"
+            }
+
+            double pendingToPay = monthlyFee - alreadyPaid;
 
             // Create payment record
             Payment payment = new Payment();
             payment.setStudentId(studentId);
-            payment.setSubjectId(subjectId);  // Already a String
-            payment.setAmountPaid(subject.getMonthlyFee());
-            payment.setPaymentMode(paymentMode);
-            payment.setPaymentDate(new Date());
-            
-            // Set month as "yyyy-MM" format
-            String currentMonth = new java.text.SimpleDateFormat("yyyy-MM").format(new Date());
-            payment.setMonth(currentMonth);
+            payment.setBatchId(batchId);
+            payment.setAmountPaid(pendingToPay);
+            payment.setPaymentDate(new java.util.Date());
 
-            // Insert into database
-            boolean success = paymentDAO.insertPayment(payment);
-            
-            if (success) {
-                System.out.println("[FeeService] ✅ Payment recorded successfully!");
-                System.out.println("[FeeService]   Amount: Rs. " + subject.getMonthlyFee());
+            String currentMonth = new java.text.SimpleDateFormat("yyyy-MM").format(new java.util.Date());
+            payment.setMonthStr(currentMonth);
+
+            if ("CASH".equalsIgnoreCase(paymentMode)) {
+                payment.setStatus("REQUESTED");
+                payment.setPaymentMode("CASH_REQUEST");
             } else {
-                System.err.println("[FeeService] ❌ Failed to record payment");
+                payment.setStatus("SUCCESS");
+                payment.setPaymentMode(paymentMode);
             }
 
+            boolean success = paymentDAO.insertPayment(payment);
+
+            if (success) {
+                System.out.println("[FeeService] ✅ Payment recorded for student=" + studentId + " batch=" + batchId);
+            } else {
+                System.err.println("[FeeService] ❌ insertPayment returned false for student=" + studentId + " batch=" + batchId);
+            }
             return success;
 
         } catch (Exception e) {
-            System.err.println("[FeeService] ❌ Error recording payment: " + e.getMessage());
+            System.err.println("[FeeService] ❌ recordPayment error: " + e.getMessage());
             e.printStackTrace();
+            return false;
         }
-
-        return false;
     }
 
     /**
@@ -257,69 +310,102 @@ public class FeeService {
      * Generate a receipt string for a paid subject.
      * Maps Student ID, Batch, Subject, and Payment details.
      */
-    public String generateReceiptString(String inputId, String subjectId) {
+    public model.Receipt generateReceipt(String inputId, int batchId) {
         String studentId = resolveStudentId(inputId);
-        System.out.println("[FeeService] Generating receipt for Student: " + studentId + ", Subject: " + subjectId);
+        System.out.println("[FeeService] Generating receipt for Student: " + studentId + ", Batch: " + batchId);
         
         try {
             // 1. Get Student Details
             model.Student student = studentDAO.getStudentById(studentId);
             if (student == null) student = studentDAO.getStudentByUserId(studentId);
             
-            String studentName = (student != null) ? student.getName() : "N/A";
-            String className = (student != null) ? student.getCurrentStd() : "N/A";
+            String studentName = (student != null) ? student.getName() : "-";
+            String className = (student != null) ? student.getCurrentStd() : "-";
 
             // 2. Get Payment Details
-            model.Payment payment = paymentDAO.getPayment(studentId, subjectId);
+            model.Payment payment = paymentDAO.getPayment(studentId, batchId);
             if (payment == null) {
-                System.err.println("[FeeService] ❌ No payment found for Student: " + studentId + ", Subject: " + subjectId);
+                System.err.println("[FeeService] ❌ No payment found for Student: " + studentId + ", Batch: " + batchId);
                 return null;
             }
 
-            // 3. Get Subject Details
-            model.Subject subject = subjectDAO.getSubjectById(Integer.parseInt(subjectId));
-            String subjectName = (subject != null) ? subject.getSubjectName() : "N/A";
-            double amount = (subject != null) ? subject.getMonthlyFee() : payment.getAmountPaid();
-
-            // 4. Get Batch Details
-            String batchName = "N/A";
-            List<model.Enrollment> enrollments = enrollmentDAO.getEnrollmentsByStudentId(studentId);
-            if (enrollments != null) {
-                for (model.Enrollment e : enrollments) {
-                    model.Batch b = batchDAO.getBatchById(e.getBatchId());
-                    if (b != null && String.valueOf(b.getSubjectId()).equals(subjectId)) {
-                        batchName = b.getBatchName();
-                        break;
-                    }
+            // 3. Get Batch and Subject Details
+            model.Batch batch = batchDAO.getBatchById(batchId);
+            String batchName = (batch != null) ? batch.getBatchName() : "-";
+            
+            String subjectName = "-";
+            double amount = payment.getAmountPaid();
+            
+            if (batch != null) {
+                model.Subject subject = subjectDAO.getSubjectById(batch.getSubjectId());
+                if (subject != null) {
+                    subjectName = subject.getSubjectName();
+                    amount = subject.getMonthlyFee();
                 }
             }
 
-            // 5. Format Date
-            String paymentDate = "N/A";
+            // 4. Format Date
+            String paymentDate = "-";
             if (payment.getPaymentDate() != null) {
                 java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd-MMM-yyyy");
                 paymentDate = sdf.format(payment.getPaymentDate());
             }
 
-            // Generate receipt string
-            StringBuilder receipt = new StringBuilder();
-            receipt.append("\n================ PAYMENT RECEIPT ================\n");
-            receipt.append("Student Name: ").append(studentName).append("\n");
-            receipt.append("Student ID: ").append(studentId).append("\n");
-            receipt.append("Class: ").append(className).append("\n");
-            receipt.append("Batch: ").append(batchName).append("\n");
-            receipt.append("Subject: ").append(subjectName).append("\n");
-            receipt.append("Amount Paid: Rs. ").append(amount).append("\n");
-            receipt.append("Payment Date: ").append(paymentDate).append("\n");
-            receipt.append("Payment Mode: ").append(payment.getPaymentMode()).append("\n");
-            receipt.append("================================================\n");
-            
-            return receipt.toString();
+            return new model.Receipt(
+                studentName,
+                studentId,
+                className,
+                batchName,
+                subjectName,
+                amount,
+                paymentDate,
+                payment.getPaymentMode() != null ? payment.getPaymentMode() : "-"
+            );
 
         } catch (Exception e) {
             System.err.println("[FeeService] ❌ Error generating receipt: " + e.getMessage());
             e.printStackTrace();
         }
         return null;
+    }
+    /**
+     * Get all payments for a student (History)
+     */
+    public List<Map<String, Object>> getPaymentHistory(String inputId) {
+        String studentId = resolveStudentId(inputId);
+        List<Map<String, Object>> history = new ArrayList<>();
+        
+        try {
+            List<Payment> payments = paymentDAO.getAllPaymentsForStudent(studentId);
+            for (Payment p : payments) {
+                Map<String, Object> row = new HashMap<>();
+                
+                Batch b = batchDAO.getBatchById(p.getBatchId());
+                String batchName = (b != null) ? b.getBatchName() : "-";
+                
+                String subjectName = "-";
+                if (b != null) {
+                    Subject s = subjectDAO.getSubjectById(b.getSubjectId());
+                    if (s != null) subjectName = s.getSubjectName();
+                }
+                
+                row.put("subject", subjectName);
+                row.put("batch", batchName);
+                row.put("amount", p.getAmountPaid());
+                row.put("method", p.getPaymentMode() != null ? p.getPaymentMode() : "-");
+                row.put("status", p.getStatus() != null ? p.getStatus() : "-");
+                
+                String dateStr = "-";
+                if (p.getPaymentDate() != null) {
+                    dateStr = new java.text.SimpleDateFormat("dd-MM-yyyy").format(p.getPaymentDate());
+                }
+                row.put("date", dateStr);
+                
+                history.add(row);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return history;
     }
 }

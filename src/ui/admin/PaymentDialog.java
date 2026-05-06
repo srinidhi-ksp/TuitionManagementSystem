@@ -210,7 +210,7 @@ public class PaymentDialog extends JDialog {
             // Record payment
             boolean success = feeService.recordPayment(
                 studentId,
-                String.valueOf(subjectId),
+                subjectId,
                 paymentMode
             );
 

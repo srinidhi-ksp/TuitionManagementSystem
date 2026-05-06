@@ -88,6 +88,8 @@ public class AdminDashboard extends JFrame {
         mainContentPanel.add(new EnrollmentManagementFrame(), "Enrollment");
         mainContentPanel.add(new AttendanceManagementFrame(), "Attendance");
         mainContentPanel.add(new FeesManagementPanel(),       "Fees & Payments");
+        mainContentPanel.add(new SalaryManagementPanel(),     "Salary Management");
+        mainContentPanel.add(new ui.common.TimetablePanel("ADMIN", null), "Timetable");
         mainContentPanel.add(new SettingsFrame(),             "Settings");
 
         add(createTopNavbar(),  BorderLayout.NORTH);
@@ -218,7 +220,7 @@ public class AdminDashboard extends JFrame {
     }
 
     // ── Sidebar ────────────────────────────────────────────────────────────────
-    private JPanel createSidebar() {
+    private JScrollPane createSidebar() {
         sidebarPanel = new JPanel();
         sidebarPanel.setName("sidebar");
         sidebarPanel.setLayout(new BoxLayout(sidebarPanel, BoxLayout.Y_AXIS));
@@ -242,6 +244,8 @@ public class AdminDashboard extends JFrame {
         addSidebarItem("📝", "Enrollment");
         addSidebarItem("📊", "Attendance");
         addSidebarItem("💰", "Fees & Payments");
+        addSidebarItem("💵", "Salary Management");
+        addSidebarItem("📅", "Timetable");
 
         sidebarPanel.add(Box.createVerticalStrut(10));
         
@@ -255,7 +259,12 @@ public class AdminDashboard extends JFrame {
         sidebarPanel.add(logoutBtn);
         sidebarPanel.add(Box.createVerticalStrut(20));
 
-        return sidebarPanel;
+        JScrollPane sidebarScroll = new JScrollPane(sidebarPanel);
+        sidebarScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        sidebarScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        sidebarScroll.setBorder(null);
+
+        return sidebarScroll;
     }
 
     private void addSidebarSection(String text) {
@@ -584,4 +593,4 @@ public class AdminDashboard extends JFrame {
             alertsListPanel.repaint();
         }
     }
-}
+}

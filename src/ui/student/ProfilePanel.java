@@ -130,7 +130,8 @@ public class ProfilePanel extends JPanel {
         JLabel name = new JLabel(s.getName());
         name.setFont(new Font("SansSerif", Font.BOLD, 24));
         name.setForeground(TEXT_PRI);
-        JLabel id = new JLabel("ID: " + s.getUserId() + "  |  Class: " + s.getCurrentStd() + "  |  Status: ACTIVE");
+        String stdStr = (s.getCurrentStd() != null && !s.getCurrentStd().equalsIgnoreCase("null")) ? s.getCurrentStd() : "Not Assigned";
+        JLabel id = new JLabel("ID: " + s.getUserId() + "  |  Class: " + stdStr + "  |  Status: ACTIVE");
         id.setForeground(TEXT_SEC);
         info.add(name);
         info.add(id);
@@ -145,7 +146,13 @@ public class ProfilePanel extends JPanel {
         grid.setOpaque(false);
         grid.add(createField("Email", s.getEmail()));
         grid.add(createField("Phone", s.getPhone()));
-        grid.add(createField("Address", s.getStreet() + ", " + s.getCity()));
+        
+        String street = (s.getStreet() != null && !s.getStreet().equalsIgnoreCase("null")) ? s.getStreet().trim() : "";
+        String city = (s.getCity() != null && !s.getCity().equalsIgnoreCase("null")) ? s.getCity().trim() : "";
+        String fullAddress = (street.isEmpty() && city.isEmpty()) ? "-" : 
+                            (street.isEmpty() ? city : (city.isEmpty() ? street : street + ", " + city));
+        
+        grid.add(createField("Address", fullAddress));
         card.add(grid, BorderLayout.CENTER);
         return card;
     }
@@ -154,7 +161,7 @@ public class ProfilePanel extends JPanel {
         JPanel card = createSectionCard("Academic Details");
         JPanel grid = new JPanel(new GridLayout(0, 1, 0, 12));
         grid.setOpaque(false);
-        grid.add(createField("Join Date", s.getJoinDate() != null ? new SimpleDateFormat("dd MMM yyyy").format(s.getJoinDate()) : "N/A"));
+        grid.add(createField("Join Date", s.getJoinDate() != null ? new SimpleDateFormat("dd-MM-yyyy").format(s.getJoinDate()) : "-"));
         grid.add(createField("Board", s.getBoard()));
         grid.add(createField("Standard", s.getCurrentStd()));
         card.add(grid, BorderLayout.CENTER);
@@ -179,11 +186,11 @@ public class ProfilePanel extends JPanel {
         grid.setOpaque(false);
         
         Map<String, Object> fees = data.getFeeSummary();
-        String feeStatus = fees != null ? (String) fees.get("status") : "N/A";
+        String feeStatus = fees != null ? (String) fees.get("status") : "-";
         
         grid.add(createField("Enrollments", data.getTotalEnrollments() + " Active Batches"));
         grid.add(createField("Fee Status", feeStatus));
-        grid.add(createField("Pending Balance", fees != null ? "₹ " + fees.get("pendingAmount") : "N/A"));
+        grid.add(createField("Pending Balance", fees != null ? "₹ " + fees.get("pendingAmount") : "-"));
         card.add(grid, BorderLayout.CENTER);
         return card;
     }
@@ -288,7 +295,7 @@ public class ProfilePanel extends JPanel {
         JLabel l = new JLabel(label.toUpperCase());
         l.setFont(new Font("SansSerif", Font.BOLD, 10));
         l.setForeground(TEXT_SEC);
-        JLabel v = new JLabel(value != null && !value.isEmpty() ? value : "N/A");
+        JLabel v = new JLabel(value != null && !value.trim().isEmpty() && !value.equalsIgnoreCase("null") ? value : "-");
         v.setFont(new Font("SansSerif", Font.BOLD, 14));
         v.setForeground(TEXT_PRI);
         p.add(l); p.add(v);

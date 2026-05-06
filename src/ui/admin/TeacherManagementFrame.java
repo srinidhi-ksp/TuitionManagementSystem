@@ -302,21 +302,27 @@ public class TeacherManagementFrame extends JPanel {
 
     private void populateTeacherTable() {
         SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+        dao.UserDAO userDAO = new dao.UserDAO();
         for (Teacher t : currentTeachers) {
-            java.util.Date joinDateRaw = t.getJoinDate();
+            String joinStr = t.getJoinDate();
+            
+            // Fallback if joinDate is missing
+            if ((joinStr == null || joinStr.equals("-")) && t.getEmail() != null) {
+                java.util.Date fallback = userDAO.getCreatedAtByEmail(t.getEmail());
+                if (fallback == null) fallback = userDAO.getCreatedAt(t.getUserId());
+                if (fallback != null) joinStr = sdf.format(fallback);
+            }
+            if (joinStr == null) joinStr = "-";
+            
             String city    = t.getCity()   != null ? t.getCity()                  : "--";
-            String joinStr = joinDateRaw   != null ? sdf.format(joinDateRaw)      : "--";
             String name    = t.getName()   != null ? t.getName()
                                                    : "Unspecified (#" + t.getUserId() + ")";
             String spec    = t.getSpecialization() != null ? t.getSpecialization() : "--";
             
             // Fix experience display: handle Integer and null
-            String exp = "—";
-            if (t.getExperienceYears() != null) {
-                exp = t.getExperienceYears() + (t.getExperienceYears() == 1 ? " year" : " years");
-            }
+            String exp = t.getExperience() + (t.getExperience() == 1 ? " year" : " years");
             
-            String salary  = t.getSalaryAmount() > 0 ? "₹" + ((long)t.getSalaryAmount()) : "—";
+            String salary  = t.getSalary() > 0 ? "₹" + ((long)t.getSalary()) : "—";
             String degree  = t.getHighestDegree() != null ? t.getHighestDegree() : "—";
             
             model.addRow(new Object[]{name, spec, exp, salary, degree, city, joinStr, ""});
@@ -376,11 +382,17 @@ public class TeacherManagementFrame extends JPanel {
             phoneField.setText(editTarget.getPhone() != null ? editTarget.getPhone() : "");
             specField.setText(editTarget.getSpecialization() != null ? editTarget.getSpecialization() : "");
             cityField.setText(editTarget.getCity() != null ? editTarget.getCity() : "");
-            if (editTarget.getJoinDate() != null) joinChooser.setDate(editTarget.getJoinDate());
+            
+            String jdStr = editTarget.getJoinDate();
+            if (jdStr != null && !jdStr.equals("-")) {
+                try {
+                    joinChooser.setDate(new SimpleDateFormat("dd-MM-yyyy").parse(jdStr));
+                } catch (Exception ex) {}
+            }
             
             // ── NEW FIELDS ──
-            experienceSpinner.setValue(editTarget.getExperienceYears() != null ? editTarget.getExperienceYears() : 0);
-            salaryField.setText(editTarget.getSalaryAmount() > 0 ? String.valueOf((long)editTarget.getSalaryAmount()) : "");
+            experienceSpinner.setValue(editTarget.getExperience());
+            salaryField.setText(editTarget.getSalary() > 0 ? String.valueOf((long)editTarget.getSalary()) : "");
             degreeField.setText(editTarget.getHighestDegree() != null ? editTarget.getHighestDegree() : "");
             statusCombo.setSelectedItem(editTarget.getStatus() != null ? editTarget.getStatus() : "ACTIVE");
             
@@ -429,14 +441,20 @@ public class TeacherManagementFrame extends JPanel {
                 t.setPhone(phoneField.getText().trim());
                 t.setRole("TEACHER"); 
                 t.setSpecialization(specField.getText().trim());
-                t.setJoinDate(joinChooser.getDate());
+                
+                java.util.Date chosenDate = joinChooser.getDate();
+                if (chosenDate != null) {
+                    t.setJoinDate(new SimpleDateFormat("dd-MM-yyyy").format(chosenDate));
+                } else {
+                    t.setJoinDate("-");
+                }
                 t.setCity(cityField.getText().trim()); 
                 t.setAdminId("A001");
                 
                 // ── NEW FIELDS ──
-                t.setExperienceYears((Integer) experienceSpinner.getValue());
+                t.setExperience((Integer) experienceSpinner.getValue());
                 if (!salaryField.getText().trim().isEmpty()) {
-                    t.setSalaryAmount(Double.parseDouble(salaryField.getText().trim()));
+                    t.setSalary(Double.parseDouble(salaryField.getText().trim()));
                 }
                 t.setHighestDegree(degreeField.getText().trim());
                 t.setStatus((String) statusCombo.getSelectedItem());
@@ -495,15 +513,19 @@ public class TeacherManagementFrame extends JPanel {
         if (cityField.getText().trim().isEmpty()) {
             cityErr.setText("City is required"); ok = false;
         } else cityErr.setText("");
-        // ── Validate salary (optional but must be numeric if provided) ──
-        if (!salaryField.getText().trim().isEmpty()) {
+        // ── Salary is mandatory and must be a positive number ──
+        String salaryText = salaryField.getText().trim();
+        if (salaryText.isEmpty()) {
+            salaryErr.setText("Salary is required"); ok = false;
+        } else {
             try {
-                Double.parseDouble(salaryField.getText().trim());
-                salaryErr.setText("");
+                double salVal = Double.parseDouble(salaryText);
+                if (salVal <= 0) { salaryErr.setText("Must be > 0"); ok = false; }
+                else salaryErr.setText("");
             } catch (NumberFormatException e) {
                 salaryErr.setText("Must be a number"); ok = false;
             }
-        } else salaryErr.setText("");
+        }
         return ok;
     }
 

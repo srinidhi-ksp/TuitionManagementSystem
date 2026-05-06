@@ -119,6 +119,7 @@ public class ParentAttendancePanel extends JPanel {
                 String status = (String) value;
                 if ("PRESENT".equalsIgnoreCase(status)) l.setForeground(new Color(34, 197, 94));
                 else if ("ABSENT".equalsIgnoreCase(status)) l.setForeground(new Color(239, 68, 68));
+                else if ("CANCELLED".equalsIgnoreCase(status)) l.setForeground(new Color(148, 163, 184));
                 else l.setForeground(new Color(245, 158, 11));
                 l.setFont(new Font("SansSerif", Font.BOLD, 13));
                 return l;

@@ -14,10 +14,13 @@ public class StudentProfileService {
     public StudentProfileDTO getStudentProfile(String userId) {
         StudentProfileDTO profile = new StudentProfileDTO();
         
-        // 1. Resolve studentId and fetch Student
-        Student student = studentDAO.getStudentByUserId(userId);
+        // 1. Resolve studentId and fetch Student with full details (Class, Board, Join Date)
+        Student student = studentDAO.getStudentFullDetails(userId);
         if (student == null) {
-            student = studentDAO.getStudentById(userId);
+            student = studentDAO.getStudentByUserId(userId);
+            if (student != null) {
+                student = studentDAO.getStudentFullDetails(student.getUserId());
+            }
         }
         
         if (student == null) return null;
@@ -25,10 +28,16 @@ public class StudentProfileService {
         String studentId = student.getUserId();
 
         // 2. Parent Details
-        profile.setParentName(student.getParentName());
-        profile.setParentPhone(student.getParentPhone());
-        profile.setParentOccupation(student.getParentOccupation());
-        profile.setParentRelation(student.getParentRelation());
+        String parentUserId = student.getParentUserId();
+        if (parentUserId != null) {
+            Parent parent = new ParentDAO().getByUserId(parentUserId);
+            if (parent != null) {
+                profile.setParentName(parent.getName());
+                profile.setParentPhone(parent.getPhone());
+                profile.setParentOccupation(parent.getOccupation());
+                profile.setParentRelation(parent.getRelationType() != null ? parent.getRelationType() : "Father");
+            }
+        }
 
         // 3. Fee Summary
         profile.setFeeSummary(feeService.getFeeSummary(studentId));
@@ -54,7 +63,7 @@ public class StudentProfileService {
         if (tests.isEmpty()) {
             performance.setTotalTests(0);
             performance.setAverageScore(0);
-            performance.setGrade("N/A");
+            performance.setGrade("-");
             performance.setTestHistory(new ArrayList<>());
             return performance;
         }
@@ -104,7 +113,7 @@ public class StudentProfileService {
         performance.setAverageScore(avg);
         
         // Grade Logic
-        if (evaluatedCount == 0) performance.setGrade("N/A");
+        if (evaluatedCount == 0) performance.setGrade("-");
         else if (avg >= 90) performance.setGrade("A");
         else if (avg >= 75) performance.setGrade("B");
         else if (avg >= 60) performance.setGrade("C");

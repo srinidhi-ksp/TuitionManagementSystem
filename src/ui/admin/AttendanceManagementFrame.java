@@ -49,7 +49,7 @@ public class AttendanceManagementFrame extends JPanel {
     private DateChooser       teacherDateChooser;
     private DefaultTableModel teacherTableModel;
     private List<Teacher>     allTeachers = new ArrayList<>();
-    private static final String[] STATUS_OPTIONS = {"Present", "Absent", "Late"};
+    private static final String[] STATUS_OPTIONS = {"Present", "Absent", "Late", "Cancelled"};
 
     public AttendanceManagementFrame() {
         setLayout(new BorderLayout());
@@ -144,10 +144,16 @@ public class AttendanceManagementFrame extends JPanel {
         JLabel headerLbl = new JLabel("Student Attendance List");
         headerLbl.setFont(new Font("SansSerif", Font.BOLD, 15));
         headerLbl.setForeground(TEXT_PRI);
+        JPanel headerBtnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        headerBtnPanel.setOpaque(false);
+        JButton cancelClassBtn = makeAccentButton("✕  Cancel Entire Class");
+        cancelClassBtn.addActionListener(e -> cancelEntireClass());
         JButton saveBtn = makeAccentButton("✓  Save Attendance");
         saveBtn.addActionListener(e -> saveStudentAttendance());
+        headerBtnPanel.add(cancelClassBtn);
+        headerBtnPanel.add(saveBtn);
         cardHeader.add(headerLbl, BorderLayout.WEST);
-        cardHeader.add(saveBtn, BorderLayout.EAST);
+        cardHeader.add(headerBtnPanel, BorderLayout.EAST);
 
         // Column headers strip
         JPanel colHeaders = new JPanel(new GridLayout(1, 4));
@@ -156,7 +162,7 @@ public class AttendanceManagementFrame extends JPanel {
             BorderFactory.createMatteBorder(0,0,1,0,new Color(230,235,245)),
             new EmptyBorder(10,20,10,20)));
         for (String h : new String[]{"#", "Student Name", "Status", ""}) {
-            JLabel lbl = new JLabel(h.equals("Status") ? "  Present       Absent       Late" : h);
+            JLabel lbl = new JLabel(h.equals("Status") ? "  Present       Absent       Late       Cancelled" : h);
             lbl.setFont(new Font("SansSerif", Font.BOLD, 11));
             lbl.setForeground(TEXT_SEC);
             colHeaders.add(lbl);
@@ -242,20 +248,23 @@ public class AttendanceManagementFrame extends JPanel {
         JLabel nameLbl = new JLabel(s.getName() != null ? s.getName() : s.getUserId());
         nameLbl.setFont(new Font("SansSerif", Font.PLAIN, 13)); nameLbl.setForeground(TEXT_PRI);
 
-        JRadioButton present = styledRadio("Present", new Color(34, 197, 94));
-        JRadioButton absent  = styledRadio("Absent",  new Color(239, 68, 68));
-        JRadioButton late    = styledRadio("Late",    new Color(245, 158, 11));
-        present.setActionCommand("Present"); absent.setActionCommand("Absent"); late.setActionCommand("Late");
+        JRadioButton present   = styledRadio("Present",   new Color(34, 197, 94));
+        JRadioButton absent    = styledRadio("Absent",    new Color(239, 68, 68));
+        JRadioButton late      = styledRadio("Late",      new Color(245, 158, 11));
+        JRadioButton cancelled = styledRadio("Cancelled", new Color(148, 163, 184));
+        present.setActionCommand("Present"); absent.setActionCommand("Absent");
+        late.setActionCommand("Late"); cancelled.setActionCommand("Cancelled");
         ButtonGroup bg = new ButtonGroup();
-        bg.add(present); bg.add(absent); bg.add(late);
+        bg.add(present); bg.add(absent); bg.add(late); bg.add(cancelled);
         statusGroups.put(s.getUserId(), bg);
-        if ("Absent".equalsIgnoreCase(defaultStatus))    absent.setSelected(true);
-        else if ("Late".equalsIgnoreCase(defaultStatus)) late.setSelected(true);
-        else                                             present.setSelected(true);
+        if ("Absent".equalsIgnoreCase(defaultStatus))        absent.setSelected(true);
+        else if ("Late".equalsIgnoreCase(defaultStatus))     late.setSelected(true);
+        else if ("Cancelled".equalsIgnoreCase(defaultStatus)) cancelled.setSelected(true);
+        else                                                  present.setSelected(true);
 
         JPanel radioPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
         radioPanel.setBackground(CARD_BG);
-        radioPanel.add(present); radioPanel.add(absent); radioPanel.add(late);
+        radioPanel.add(present); radioPanel.add(absent); radioPanel.add(late); radioPanel.add(cancelled);
 
         row.add(numLbl); row.add(nameLbl); row.add(radioPanel); row.add(new JLabel(""));
         row.addMouseListener(new java.awt.event.MouseAdapter() {
@@ -391,9 +400,10 @@ public class AttendanceManagementFrame extends JPanel {
                     boolean sel,boolean foc,int r,int c) {
                 JLabel lbl = (JLabel) super.getTableCellRendererComponent(t,v,sel,foc,r,c);
                 String val = v != null ? v.toString() : "Present";
-                if ("Absent".equals(val))      lbl.setForeground(new Color(239, 68, 68));
-                else if ("Late".equals(val))   lbl.setForeground(new Color(245, 158, 11));
-                else                           lbl.setForeground(new Color(34, 197, 94));
+                if ("Absent".equals(val))         lbl.setForeground(new Color(239, 68, 68));
+                else if ("Late".equals(val))      lbl.setForeground(new Color(245, 158, 11));
+                else if ("Cancelled".equals(val)) lbl.setForeground(new Color(148, 163, 184));
+                else                              lbl.setForeground(new Color(34, 197, 94));
                 lbl.setFont(new Font("SansSerif", Font.BOLD, 12));
                 lbl.setBorder(new EmptyBorder(0,16,0,0));
                 lbl.setBackground(sel ? new Color(74,144,226,20) : CARD_BG);
@@ -450,6 +460,33 @@ public class AttendanceManagementFrame extends JPanel {
             if (dao.saveTeacherAttendance(t.getUserId(), status, dateStr)) saved++;
         }
         JOptionPane.showMessageDialog(this, "✓ Teacher attendance saved for " + saved + " teacher(s) on " + dateStr + ".");
+    }
+
+    // ── Bulk Cancel: set all loaded students to Cancelled ─────────────────────
+    private void cancelEntireClass() {
+        if (statusGroups.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "No students loaded. Please load students first.");
+            return;
+        }
+        int confirm = JOptionPane.showConfirmDialog(this,
+            "Mark ALL students as Cancelled for this session?",
+            "Cancel Entire Class", JOptionPane.YES_NO_OPTION);
+        if (confirm != JOptionPane.YES_OPTION) return;
+
+        // Set every ButtonGroup to Cancelled
+        for (ButtonGroup bg : statusGroups.values()) {
+            java.util.Enumeration<javax.swing.AbstractButton> btns = bg.getElements();
+            while (btns.hasMoreElements()) {
+                javax.swing.AbstractButton btn = btns.nextElement();
+                if ("Cancelled".equals(btn.getActionCommand())) {
+                    btn.setSelected(true);
+                    break;
+                }
+            }
+        }
+        studentListPanel.revalidate();
+        studentListPanel.repaint();
+        JOptionPane.showMessageDialog(this, "✓ All students marked as Cancelled. Click 'Save Attendance' to persist.");
     }
 
     // ── Shared widget helpers ──────────────────────────────────────────────────
