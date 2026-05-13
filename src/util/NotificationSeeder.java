@@ -9,7 +9,7 @@ public class NotificationSeeder {
 
     public static void seedNotificationsFromExistingPayments() {
         MongoDatabase db = DBConnection.getDatabase();
-        NotificationService ns = new NotificationService();
+        NotificationService ns = NotificationService.getInstance();
         
         System.out.println("Starting notification seeding...");
         

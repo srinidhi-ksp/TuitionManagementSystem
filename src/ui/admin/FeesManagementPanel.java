@@ -41,7 +41,10 @@ public class FeesManagementPanel extends JPanel {
     // Components for Tab 1 (Analytics)
     private DefaultTableModel analyticsModel;
     private JComboBox<String> analyticsFilterCombo;
+    private JComboBox<String> monthCombo;
+    private JComboBox<String> yearCombo;
     private JLabel totalStudentsCard, paidStudentsCard, unpaidStudentsCard;
+    private JLabel totalCollectedCard, analyticsPendingCard, partialPaymentsCard, collectionPctCard;
     private DoughnutChartPanel chartPanel;
 
     // Components for Tab 2 (Management)
@@ -127,17 +130,23 @@ public class FeesManagementPanel extends JPanel {
         panel.setBackground(ThemeManager.BG);
         panel.setBorder(new EmptyBorder(20, 0, 0, 0));
 
-        // Top Summary Cards
-        JPanel statsPanel = new JPanel(new GridLayout(1, 3, 20, 0));
+        // Top Summary Cards (2 rows, 3 columns)
+        JPanel statsPanel = new JPanel(new GridLayout(2, 3, 20, 20));
         statsPanel.setBackground(ThemeManager.BG);
         
-        totalStudentsCard = new JLabel("0", SwingConstants.LEFT);
+        totalCollectedCard = new JLabel("₹0", SwingConstants.LEFT);
+        analyticsPendingCard = new JLabel("₹0", SwingConstants.LEFT);
+        partialPaymentsCard = new JLabel("0", SwingConstants.LEFT);
         paidStudentsCard = new JLabel("0", SwingConstants.LEFT);
         unpaidStudentsCard = new JLabel("0", SwingConstants.LEFT);
+        collectionPctCard = new JLabel("0%", SwingConstants.LEFT);
 
-        statsPanel.add(createStatCard("TOTAL STUDENTS", totalStudentsCard, COLOR_ACCENT));
+        statsPanel.add(createStatCard("TOTAL COLLECTED", totalCollectedCard, COLOR_ACCENT));
+        statsPanel.add(createStatCard("PENDING AMOUNT", analyticsPendingCard, COLOR_ERROR));
+        statsPanel.add(createStatCard("PARTIAL PAYMENTS", partialPaymentsCard, COLOR_PENDING));
         statsPanel.add(createStatCard("PAID STUDENTS", paidStudentsCard, COLOR_SUCCESS));
         statsPanel.add(createStatCard("UNPAID STUDENTS", unpaidStudentsCard, COLOR_ERROR));
+        statsPanel.add(createStatCard("COLLECTION PERCENTAGE", collectionPctCard, COLOR_ACCENT));
 
         panel.add(statsPanel, BorderLayout.NORTH);
 
@@ -177,14 +186,48 @@ public class FeesManagementPanel extends JPanel {
         listTitle.setFont(new Font("SansSerif", Font.BOLD, 15));
         tableHeader.add(listTitle, BorderLayout.WEST);
 
+        // Filters Panel
+        JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        filterPanel.setBackground(ThemeManager.CARD);
+
+        String[] months = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
+        JComboBox<String> monthCombo = new JComboBox<>(months);
+        monthCombo.setSelectedItem(new java.text.SimpleDateFormat("MMMM").format(new java.util.Date()));
+        monthCombo.setPreferredSize(new Dimension(100, 30));
+        monthCombo.addActionListener(e -> refreshAnalytics());
+
+        String[] years = {"2025", "2026", "2027"};
+        JComboBox<String> yearCombo = new JComboBox<>(years);
+        yearCombo.setSelectedItem(new java.text.SimpleDateFormat("yyyy").format(new java.util.Date()));
+        yearCombo.setPreferredSize(new Dimension(80, 30));
+        yearCombo.addActionListener(e -> refreshAnalytics());
+
         analyticsFilterCombo = new JComboBox<>(new String[]{"All Students", "Paid Students", "Unpaid Students", "Partially Paid Students"});
-        analyticsFilterCombo.setPreferredSize(new Dimension(180, 30));
+        analyticsFilterCombo.setPreferredSize(new Dimension(150, 30));
         analyticsFilterCombo.addActionListener(e -> refreshAnalytics());
-        tableHeader.add(analyticsFilterCombo, BorderLayout.EAST);
+
+        JButton loadBtn = new JButton("↻ Load Data");
+        loadBtn.setBackground(new Color(248, 250, 253));
+        loadBtn.setForeground(COLOR_ACCENT);
+        loadBtn.setFont(new Font("SansSerif", Font.BOLD, 12));
+        loadBtn.setPreferredSize(new Dimension(110, 30));
+        loadBtn.setFocusPainted(false);
+        loadBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        loadBtn.addActionListener(e -> refreshAnalytics());
+
+        filterPanel.add(monthCombo);
+        filterPanel.add(yearCombo);
+        filterPanel.add(analyticsFilterCombo);
+        filterPanel.add(loadBtn);
+        tableHeader.add(filterPanel, BorderLayout.EAST);
+        
+        // Expose dropdowns for refreshAnalytics
+        this.monthCombo = monthCombo;
+        this.yearCombo = yearCombo;
         
         tableCard.add(tableHeader, BorderLayout.NORTH);
 
-        String[] cols = {"Student Name", "Standard", "Batch", "Status"};
+        String[] cols = {"Student Name", "Student ID", "Batch", "Payment Amount", "Pending Amount", "Status", "Mode", "Date"};
         analyticsModel = new DefaultTableModel(cols, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
         };
@@ -221,9 +264,9 @@ public class FeesManagementPanel extends JPanel {
                 setForeground(ThemeManager.TEXT);
                 setBorder(new EmptyBorder(0, 15, 0, 0));
                 
-                if (c == 3) { // Status column
+                if (c == 5) { // Status column
                     String status = String.valueOf(value).toUpperCase();
-                    if (status.equals("PAID")) setForeground(COLOR_SUCCESS);
+                    if (status.equals("PAID") || status.equals("SUCCESS")) setForeground(COLOR_SUCCESS);
                     else if (status.equals("PARTIAL")) setForeground(COLOR_PENDING); // orange
                     else if (status.equals("UNPAID")) setForeground(COLOR_ERROR);
                     else if (status.equals("PENDING")) setForeground(COLOR_PENDING);
@@ -237,32 +280,47 @@ public class FeesManagementPanel extends JPanel {
     }
 
     private void refreshAnalytics() {
-        List<Map<String, Object>> data = analyticsDAO.getAllStudentFeeStatus();
-        String filter = (String) analyticsFilterCombo.getSelectedItem();
+        String selMonthName = monthCombo != null ? (String) monthCombo.getSelectedItem() : new java.text.SimpleDateFormat("MMMM").format(new java.util.Date());
+        String selYear = yearCombo != null ? (String) yearCombo.getSelectedItem() : new java.text.SimpleDateFormat("yyyy").format(new java.util.Date());
         
-        long total = data.size();
-        long paid = data.stream().filter(d -> "PAID".equals(d.get("status"))).count();
-        long unpaid = data.stream().filter(d -> "UNPAID".equals(d.get("status"))).count();
-        long partial = data.stream().filter(d -> "PARTIAL".equals(d.get("status"))).count();
+        String monthNum = "01";
+        try {
+            java.util.Date date = new java.text.SimpleDateFormat("MMMM").parse(selMonthName);
+            monthNum = new java.text.SimpleDateFormat("MM").format(date);
+        } catch (Exception e) {}
+        
+        String filterMonth = selYear + "-" + monthNum;
 
-        totalStudentsCard.setText(String.valueOf(total));
-        paidStudentsCard.setText(String.valueOf(paid));
-        unpaidStudentsCard.setText(String.valueOf(unpaid + partial)); // Group partial with unpaid for summary color or split if needed
-        
-        chartPanel.updateData(paid, unpaid + partial);
+        List<Map<String, Object>> data = analyticsDAO.getAllStudentFeeStatus(filterMonth, selYear);
+        Map<String, Double> stats = analyticsDAO.getFeeSummaryStats(filterMonth, selYear);
+
+        String filter = analyticsFilterCombo != null ? (String) analyticsFilterCombo.getSelectedItem() : "All Students";
+
+        totalCollectedCard.setText(String.format("₹%.2f", stats.getOrDefault("totalCollected", 0.0)));
+        analyticsPendingCard.setText(String.format("₹%.2f", stats.getOrDefault("pendingAmount", 0.0)));
+        partialPaymentsCard.setText(String.valueOf(stats.getOrDefault("partialPayments", 0.0).intValue()));
+        paidStudentsCard.setText(String.valueOf(stats.getOrDefault("paidStudents", 0.0).intValue()));
+        unpaidStudentsCard.setText(String.valueOf(stats.getOrDefault("unpaidStudents", 0.0).intValue()));
+        collectionPctCard.setText(String.format("%.1f%%", stats.getOrDefault("collectionPercentage", 0.0)));
+
+        chartPanel.updateData((long) stats.getOrDefault("paidStudents", 0.0).intValue(), (long) (stats.getOrDefault("unpaidStudents", 0.0).intValue() + stats.getOrDefault("partialPayments", 0.0).intValue()));
 
         analyticsModel.setRowCount(0);
         for (Map<String, Object> d : data) {
-            String status = (String) d.get("status");
-            if ("Paid Students".equals(filter) && !"PAID".equals(status)) continue;
+            String status = (String) d.get("payment_status");
+            if ("Paid Students".equals(filter) && !("PAID".equals(status) || "SUCCESS".equals(status))) continue;
             if ("Unpaid Students".equals(filter) && !"UNPAID".equals(status)) continue;
             if ("Partially Paid Students".equals(filter) && !"PARTIAL".equals(status)) continue;
             
             analyticsModel.addRow(new Object[]{
-                d.get("name"),
-                d.get("standard"),
-                d.get("batch"),
-                status
+                d.get("student_name"),
+                d.get("student_id"),
+                d.get("batch_name"),
+                "₹" + d.get("payment_amount"),
+                "₹" + d.get("pending_amount"),
+                status,
+                d.get("payment_mode"),
+                d.get("payment_date")
             });
         }
     }

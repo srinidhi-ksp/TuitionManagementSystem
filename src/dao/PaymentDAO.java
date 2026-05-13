@@ -455,7 +455,7 @@ public class PaymentDAO {
                     Filters.eq("student_id", studentId),
                     Filters.eq("studentId", studentId)
                 )
-            ).iterator();
+            ).sort(new Document("date", -1)).iterator();
             while (cursor.hasNext()) {
                 list.add(db.DocumentMapper.documentToPayment(cursor.next()));
             }
@@ -490,7 +490,7 @@ public class PaymentDAO {
                     if (batch != null) batchName = batch.getString("batch_name");
                     
                     if (parentId != null) {
-                        new service.NotificationService().notifyFeePaid(
+                        service.NotificationService.getInstance().notifyFeePaid(
                             parentId, studentId, studentName, amount, batchName, mode
                         );
                     }

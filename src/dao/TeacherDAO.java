@@ -43,38 +43,19 @@ public class TeacherDAO {
     }
 
     public Teacher getTeacherById(String teacherId) {
-        com.mongodb.client.MongoDatabase database = db.DBConnection.getDatabase();
-        MongoCollection<Document> col = database.getCollection("teachers");
-
-        Document doc = col.find(Filters.eq("_id", teacherId)).first();
-
-        if (doc == null) return null;
-
-        Teacher t = new Teacher();
-
-        t.setUserId(doc.getString("_id"));
-        t.setName(doc.getString("name"));
-        if (t.getName() == null) t.setName(doc.getString("full_name"));
-        t.setEmail(doc.getString("email"));
-        t.setCity(doc.getString("city"));
-
-        Date joinDate = doc.getDate("join_date");
-
-        if (joinDate != null) {
-            t.setJoinDate(new java.text.SimpleDateFormat("dd-MM-yyyy").format(joinDate));
-        } else {
-            t.setJoinDate("-");
+        if (teacherCollection == null || teacherId == null) return null;
+        try {
+            Document doc = teacherCollection.find(Filters.or(
+                Filters.eq("_id", teacherId),
+                Filters.eq("user_id", teacherId)
+            )).first();
+            Teacher t = DocumentMapper.documentToTeacher(doc);
+            if (t != null) enrichWithJoinDate(t, doc);
+            return t;
+        } catch (Exception e) {
+            e.printStackTrace();
         }
-
-        Object salObj = doc.get("salary");
-        if (salObj instanceof Number) t.setSalary(((Number) salObj).doubleValue());
-        else t.setSalary(0);
-
-        Object expObj = doc.get("experience_years");
-        if (expObj instanceof Number) t.setExperience(((Number) expObj).intValue());
-        else t.setExperience(0);
-
-        return t;
+        return null;
     }
 
     public Document getTeacherExtraDetails(String teacherId) {
@@ -183,8 +164,22 @@ public class TeacherDAO {
     public Teacher getByUserId(String userId) {
         if (teacherCollection == null || userId == null) return null;
         try {
-            // Use getTeacherById as it has robust mapping logic
-            return getTeacherById(userId);
+            String searchId = userId.trim();
+            Document doc = teacherCollection.find(Filters.or(
+                Filters.eq("user_id", searchId),
+                Filters.eq("_id", searchId)
+            )).first();
+
+            if (doc == null) {
+                model.User user = userDAO.getUserById(searchId);
+                if (user != null && user.getEmail() != null) {
+                    doc = teacherCollection.find(Filters.eq("email", user.getEmail())).first();
+                }
+            }
+
+            Teacher teacher = DocumentMapper.documentToTeacher(doc);
+            if (teacher != null) enrichWithJoinDate(teacher, doc);
+            return teacher;
         } catch (Exception e) {
             e.printStackTrace();
         }

@@ -1,6 +1,7 @@
 package model;
 
 import java.util.Date;
+import java.util.List;
 
 public class Batch {
 
@@ -8,7 +9,7 @@ public class Batch {
     private int subjectId;
     private String teacherUserId;
     private String batchName;
-    private String timing;  // e.g. "09:00 - 11:00" — stored in & read from DB
+    private String timing;  // e.g. "09:00 - 11:00" — stored in & read from DB (legacy display)
     private Date startTime;
     private Date endTime;
     private String meetingLink;
@@ -16,8 +17,13 @@ public class Batch {
     private String category; // e.g. "Class 12", "Class 11"
     private String standard; // e.g. "8", "12" — dedicated field for EXACT matching
     private String status = "ACTIVE"; // "ACTIVE" or "INACTIVE"
+
+    // Legacy schedule list (day + start/end strings)
     private java.util.List<Schedule> schedules;
 
+    // NEW: timeslot-based schedule (day + timeslotId pairs) — per requirements §1.2 / §4
+    private String timeslotId;                       // shared timeslotId for this batch
+    private java.util.List<ScheduleEntry> scheduleEntries; // [{day, timeslotId}, ...]
 
     // Default Constructor
     public Batch() {
@@ -140,6 +146,35 @@ public class Batch {
 
     public void setSchedules(java.util.List<Schedule> schedules) {
         this.schedules = schedules;
+    }
+
+    // ── NEW: timeslot-based schedule fields ──────────────────────────────────
+
+    public String getTimeslotId() { return timeslotId; }
+    public void setTimeslotId(String timeslotId) { this.timeslotId = timeslotId; }
+
+    public java.util.List<ScheduleEntry> getScheduleEntries() { return scheduleEntries; }
+    public void setScheduleEntries(java.util.List<ScheduleEntry> scheduleEntries) {
+        this.scheduleEntries = scheduleEntries;
+    }
+
+    /**
+     * Returns all days this batch runs, derived from scheduleEntries.
+     * Falls back to legacy schedule list, then to timing string parsing.
+     */
+    public java.util.List<String> getDays() {
+        java.util.List<String> days = new java.util.ArrayList<>();
+        if (scheduleEntries != null) {
+            for (ScheduleEntry e : scheduleEntries) {
+                if (e.getDay() != null) days.add(e.getDay());
+            }
+        }
+        if (days.isEmpty() && schedules != null) {
+            for (Schedule s : schedules) {
+                if (s.getDay() != null) days.add(s.getDay());
+            }
+        }
+        return days;
     }
 
     @Override

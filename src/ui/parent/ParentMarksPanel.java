@@ -233,7 +233,7 @@ public class ParentMarksPanel extends JPanel {
                 m.getMarksObtained(),
                 m.getMaxMarks(),
                 m.getGrade() != null ? m.getGrade() : calculateGrade(m.getMarksObtained(), m.getMaxMarks()),
-                m.getTestDate() != null ? new java.text.SimpleDateFormat("dd-MM-yyyy").format(m.getTestDate()) : "—"
+                m.getTestDate() != null ? new java.text.SimpleDateFormat("dd-MM-yyyy hh:mm a").format(m.getTestDate()) : "—"
             });
         }
         chartPanel.repaint();

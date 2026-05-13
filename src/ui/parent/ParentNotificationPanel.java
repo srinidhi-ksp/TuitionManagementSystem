@@ -128,7 +128,7 @@ public class ParentNotificationPanel extends JPanel {
                 FindIterable<Document> list = notifCol.find(Filters.eq("parent_id", parentId))
                                                    .sort(Sorts.descending("date"));
                 
-                SimpleDateFormat sdf = new SimpleDateFormat("dd MMM yyyy, hh:mm a");
+                SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy hh:mm a");
                 boolean hasResults = false;
                 
                 for (Document doc : list) {

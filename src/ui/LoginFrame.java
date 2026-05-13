@@ -334,6 +334,9 @@ public class LoginFrame extends JFrame {
                     
                     if (t != null) {
                         sessionUserId = t.getUserId();
+                        if (t.getAuthUserId() == null) {
+                            t.setAuthUserId(user.getUserId());
+                        }
                         if (t.getName() != null && !t.getName().trim().isEmpty()) {
                             sessionUserName = t.getName();
                         }
@@ -379,7 +382,8 @@ public class LoginFrame extends JFrame {
             new ui.student.StudentDashboard(user).setVisible(true);
             dispose();
         } else if ("Teacher".equalsIgnoreCase(role)) {
-            new ui.teacher.TeacherDashboard(user).setVisible(true);
+            model.Teacher teacher = new dao.TeacherDAO().getByUserId(user.getUserId());
+            new ui.teacher.TeacherDashboard(teacher != null ? teacher : user).setVisible(true);
             dispose();
         } else if ("Parent".equalsIgnoreCase(role)) {
             new ui.parent.ParentDashboard(user).setVisible(true);

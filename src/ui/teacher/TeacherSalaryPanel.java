@@ -6,10 +6,10 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.io.File;
 import java.util.List;
-import dao.SalaryDAO;
 import model.SalaryRecord;
 import model.User;
 import service.SalaryPDFService;
+import util.SessionManager;
 import util.ThemeManager;
 
 /**
@@ -90,7 +90,7 @@ public class TeacherSalaryPanel extends JPanel {
         
         // As per requirements: "You DO NOT have a salary collection. So DO NOT query salary table."
         // We fetch the fixed salary from the Teacher document directly.
-        model.Teacher t = teacherDAO.getTeacherById(teacher.getId());
+        model.Teacher t = teacherDAO.getTeacherById(SessionManager.getCurrentTeacherId());
         
         if (t != null) {
             String currentMonth = new java.text.SimpleDateFormat("MMMM").format(new java.util.Date());

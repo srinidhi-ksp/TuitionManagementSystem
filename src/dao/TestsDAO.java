@@ -9,6 +9,7 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.UpdateOptions;
 import com.mongodb.client.model.Updates;
 
 import db.DBConnection;
@@ -25,7 +26,7 @@ public class TestsDAO {
         MongoDatabase database = DBConnection.getDatabase();
         if (database != null) {
             testsCollection = database.getCollection("tests");
-            marksCollection = database.getCollection("marks");
+            marksCollection = database.getCollection("tests_marks");
         }
     }
 
@@ -61,7 +62,7 @@ public class TestsDAO {
         List<Test> tests = new ArrayList<>();
         if (testsCollection == null) return tests;
 
-        try (MongoCursor<Document> cursor = testsCollection.find(Filters.eq("batch_id", batchId)).iterator()) {
+        try (MongoCursor<Document> cursor = testsCollection.find(batchIdFilter(batchId)).iterator()) {
             while (cursor.hasNext()) {
                 Document doc = cursor.next();
                 Test t = DocumentMapper.documentToTest(doc);
@@ -81,7 +82,7 @@ public class TestsDAO {
         try (MongoCursor<Document> cursor = testsCollection.find(
                 Filters.and(
                     Filters.eq("teacher_id", teacherId),
-                    Filters.eq("batch_id", batchId)
+                    batchIdFilter(batchId)
                 )
             ).iterator()) {
             while (cursor.hasNext()) {
@@ -92,6 +93,14 @@ public class TestsDAO {
             e.printStackTrace();
         }
         return tests;
+    }
+
+    private org.bson.conversions.Bson batchIdFilter(int batchId) {
+        return Filters.or(
+            Filters.eq("batch_id", batchId),
+            Filters.eq("batch_id", String.valueOf(batchId)),
+            Filters.eq("batch_id", String.format("B%03d", batchId))
+        );
     }
 
     public int countPendingEvaluationsByTeacher(String teacherId) {
@@ -131,6 +140,9 @@ public class TestsDAO {
     public Integer getExistingScore(int testId, String studentId) {
         if (testsCollection == null) return null;
         try {
+            Integer scoreFromMarks = getScoreFromMarksCollection(testId, studentId);
+            if (scoreFromMarks != null) return scoreFromMarks;
+
             Document doc = testsCollection.find(
                 Filters.and(
                     Filters.eq("_id", testId),
@@ -175,12 +187,56 @@ public class TestsDAO {
                     .append("date", new java.util.Date());
                 testsCollection.updateOne(Filters.eq("_id", testId), Updates.push("attempts", attempt));
             }
+            upsertTestMark(testId, studentId, score);
             triggerMarksUpdatedNotification(testId, studentId, score);
             return true;
         } catch (Exception e) {
             e.printStackTrace();
         }
         return false;
+    }
+
+    private Integer getScoreFromMarksCollection(int testId, String studentId) {
+        if (marksCollection == null) return null;
+        try {
+            Document doc = marksCollection.find(Filters.and(
+                Filters.eq("test_id", testId),
+                Filters.or(
+                    Filters.eq("student_id", studentId),
+                    Filters.eq("user_id", studentId)
+                )
+            )).first();
+            if (doc == null) return null;
+            Object score = doc.get("obtained_marks");
+            if (score == null) score = doc.get("marks_obtained");
+            return score instanceof Number ? ((Number) score).intValue() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void upsertTestMark(int testId, String studentId, int score) {
+        if (marksCollection == null) return;
+        try {
+            Document set = new Document()
+                .append("test_id", testId)
+                .append("student_id", studentId)
+                .append("user_id", studentId)
+                .append("obtained_marks", score)
+                .append("marks_obtained", score)
+                .append("status", "EVALUATED")
+                .append("marked_date", new java.util.Date());
+            marksCollection.updateOne(
+                Filters.and(
+                    Filters.eq("test_id", testId),
+                    Filters.or(Filters.eq("student_id", studentId), Filters.eq("user_id", studentId))
+                ),
+                new Document("$set", set),
+                new UpdateOptions().upsert(true)
+            );
+        } catch (Exception e) {
+            System.err.println("[TestsDAO] tests_marks upsert failed: " + e.getMessage());
+        }
     }
 
     public boolean saveMark(int testId, String userId, int marksObtained) {
@@ -383,7 +439,7 @@ public class TestsDAO {
                     String studentName = studentDoc.getString("full_name");
                     
                     if (parentId != null) {
-                        new service.NotificationService().notifyMarksUpdated(
+                        service.NotificationService.getInstance().notifyMarksUpdated(
                             parentId, studentId, studentName, testName, score, totalMarks
                         );
                     }

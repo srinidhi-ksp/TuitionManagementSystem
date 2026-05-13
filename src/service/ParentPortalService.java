@@ -58,7 +58,7 @@ public class ParentPortalService {
         double attendancePercent = attendanceDAO.getAttendancePercentage(studentUserId);
         overview.put("attendancePercent", attendancePercent);
         
-        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd-MM-yyyy");
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd-MM-yyyy hh:mm a");
         List<Attendance> list = attendanceDAO.getAttendanceByStudentId(studentUserId);
         int presentCount = 0;
         for (Attendance a : list) {
@@ -125,7 +125,7 @@ public class ParentPortalService {
      */
     public List<Map<String, String>> getRecentActivity(String studentUserId) {
         List<Map<String, String>> activity = new ArrayList<>();
-        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd MMM");
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd-MM-yyyy hh:mm a");
 
         // 1. Recent Payments
         PaymentDAO pDAO = new PaymentDAO();

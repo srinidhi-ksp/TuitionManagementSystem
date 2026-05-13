@@ -12,6 +12,7 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GridLayout;
 import java.awt.RenderingHints;
+import java.awt.Window;
 import java.util.List;
 import java.util.Map;
 
@@ -60,6 +61,10 @@ public class AdminDashboard extends JFrame {
     private JLabel subCountLabel;
     private JLabel batchCountLabel;
 
+    // Bell badge (updated by poller)
+    private JLabel bellBadge;
+    private javax.swing.Timer notifPoller;
+
     // Dynamic panels
     private JPanel alertsListPanel;
     private JPanel attendanceSummaryPanel;
@@ -95,6 +100,9 @@ public class AdminDashboard extends JFrame {
         add(createTopNavbar(),  BorderLayout.NORTH);
         add(createSidebar(),    BorderLayout.WEST);
         add(mainContentPanel,   BorderLayout.CENTER);
+
+        // Start notification poller after UI is visible
+        SwingUtilities.invokeLater(() -> startNotificationPoller("ADMIN", "ADMIN"));
     }
 
     // ── Top Navbar ─────────────────────────────────────────────────────────────
@@ -183,6 +191,41 @@ public class AdminDashboard extends JFrame {
         
         profileBtn.addActionListener(e -> popup.show(profileBtn, 0, profileBtn.getHeight()));
         
+        // Bell button + badge overlay
+        JPanel bellPanel = new JPanel(null);
+        bellPanel.setOpaque(false);
+        bellPanel.setPreferredSize(new Dimension(50, 40));
+
+        JButton bellBtn = new JButton("🔔");
+        bellBtn.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 16));
+        bellBtn.setForeground(Color.WHITE);
+        bellBtn.setBackground(new Color(26, 43, 71));
+        bellBtn.setBorderPainted(false);
+        bellBtn.setFocusPainted(false);
+        bellBtn.setContentAreaFilled(false);
+        bellBtn.setOpaque(false);
+        bellBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        bellBtn.setToolTipText("Notifications");
+        bellBtn.setBounds(0, 6, 34, 28);
+
+        bellBadge = new JLabel("0");
+        bellBadge.setFont(new Font("SansSerif", Font.BOLD, 9));
+        bellBadge.setForeground(Color.WHITE);
+        bellBadge.setOpaque(true);
+        bellBadge.setBackground(new Color(220, 53, 69));
+        bellBadge.setHorizontalAlignment(SwingConstants.CENTER);
+        bellBadge.setBorder(BorderFactory.createEmptyBorder(1, 4, 1, 4));
+        bellBadge.setBounds(20, 2, 26, 14);
+        bellBadge.setVisible(false);
+
+        bellPanel.add(bellBtn);
+        bellPanel.add(bellBadge);
+
+        final JLabel badgeRef = bellBadge;
+        bellBtn.addActionListener(e -> ui.common.NotificationInboxPanel.showInbox(
+            (Window) this, "ADMIN", "ADMIN", badgeRef));
+
+        userPanel.add(bellPanel);
         userPanel.add(profileBtn);
 
         // Safe UI Reset
@@ -194,6 +237,34 @@ public class AdminDashboard extends JFrame {
         topPanel.add(logoPanel, BorderLayout.WEST);
         topPanel.add(userPanel, BorderLayout.EAST);
         return topPanel;
+    }
+
+    /**
+     * Polls MongoDB every 30 seconds on the Swing EDT for unread notification count.
+     * javax.swing.Timer fires on EDT — safe to update UI directly.
+     */
+    private void startNotificationPoller(String recipientType, String recipientId) {
+        notifPoller = new javax.swing.Timer(30_000, e -> {
+            long unread = service.NotificationService.getInstance()
+                .getUnreadCount(recipientType, recipientId);
+            if (bellBadge != null) {
+                if (unread > 0) {
+                    bellBadge.setText(unread > 99 ? "99+" : String.valueOf(unread));
+                    bellBadge.setVisible(true);
+                } else {
+                    bellBadge.setVisible(false);
+                }
+            }
+        });
+        notifPoller.setInitialDelay(0); // fire once immediately on start
+        notifPoller.start();
+
+        // Stop when window closes
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override public void windowClosed(java.awt.event.WindowEvent e) {
+                if (notifPoller != null) notifPoller.stop();
+            }
+        });
     }
 
     private void navigateTo(String label) {

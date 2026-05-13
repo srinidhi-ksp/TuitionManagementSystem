@@ -156,17 +156,31 @@ public class AttendanceManagementFrame extends JPanel {
         cardHeader.add(headerBtnPanel, BorderLayout.EAST);
 
         // Column headers strip
-        JPanel colHeaders = new JPanel(new GridLayout(1, 4));
+        JPanel colHeaders = new JPanel(new GridBagLayout());
         colHeaders.setBackground(new Color(248, 250, 253));
         colHeaders.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createMatteBorder(0,0,1,0,new Color(230,235,245)),
             new EmptyBorder(10,20,10,20)));
-        for (String h : new String[]{"#", "Student Name", "Status", ""}) {
-            JLabel lbl = new JLabel(h.equals("Status") ? "  Present       Absent       Late       Cancelled" : h);
-            lbl.setFont(new Font("SansSerif", Font.BOLD, 11));
-            lbl.setForeground(TEXT_SEC);
-            colHeaders.add(lbl);
-        }
+            
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weighty = 1.0;
+
+        // #
+        gbc.weightx = 0.05; gbc.gridx = 0;
+        colHeaders.add(headerLabel("#"), gbc);
+        // Name
+        gbc.weightx = 0.35; gbc.gridx = 1;
+        colHeaders.add(headerLabel("Student Name"), gbc);
+        // Status
+        gbc.weightx = 0.60; gbc.gridx = 2;
+        JPanel statusHeader = new JPanel(new FlowLayout(FlowLayout.LEFT, 25, 0));
+        statusHeader.setOpaque(false);
+        statusHeader.add(headerLabel("Present"));
+        statusHeader.add(headerLabel("Absent"));
+        statusHeader.add(headerLabel("Late"));
+        statusHeader.add(headerLabel("Cancelled"));
+        colHeaders.add(statusHeader, gbc);
 
         studentListPanel = new JPanel();
         studentListPanel.setLayout(new BoxLayout(studentListPanel, BoxLayout.Y_AXIS));
@@ -189,6 +203,13 @@ public class AttendanceManagementFrame extends JPanel {
         outer.add(innerStack, BorderLayout.CENTER);
         return outer;
     }
+    
+    private JLabel headerLabel(String text) {
+        JLabel lbl = new JLabel(text);
+        lbl.setFont(new Font("SansSerif", Font.BOLD, 11));
+        lbl.setForeground(TEXT_SEC);
+        return lbl;
+    }
 
     // ── Load students for selected batch+date ──────────────────────────────────
     private void loadStudents() {
@@ -208,14 +229,13 @@ public class AttendanceManagementFrame extends JPanel {
 
         String dateStr = DATE_KEY.format(studentDateChooser.getDate());
 
-        List<Enrollment> enrollments = new EnrollmentDAO().getAllEnrollments();
+        List<String> studentIds = new EnrollmentDAO().getStudentIdsByBatchId(batchId);
         StudentDAO sDao = new StudentDAO();
         List<Student> enrolled = new ArrayList<>();
-        for (Enrollment en : enrollments)
-            if (en.getBatchId() == batchId) {
-                Student s = sDao.getStudentById(en.getStudentUserId());
-                if (s != null) enrolled.add(s);
-            }
+        for (String sId : studentIds) {
+            Student s = sDao.getStudentById(sId);
+            if (s != null) enrolled.add(s);
+        }
 
         // Pre-load existing attendance for this batch+date
         List<Attendance> existing = new AttendanceDAO().getAttendanceByBatchAndDate(batchId, dateStr);
@@ -238,42 +258,54 @@ public class AttendanceManagementFrame extends JPanel {
     }
 
     private JPanel buildStudentRow(int idx, Student s, String defaultStatus) {
-        JPanel row = new JPanel(new GridLayout(1, 4));
+        JPanel row = new JPanel(new GridBagLayout());
         row.setBackground(CARD_BG);
-        row.setBorder(new EmptyBorder(12, 20, 12, 20));
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 52));
+        row.setBorder(new EmptyBorder(8, 20, 8, 20));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 50));
+        
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weighty = 1.0;
 
         JLabel numLbl  = new JLabel(String.valueOf(idx));
         numLbl.setFont(new Font("SansSerif", Font.PLAIN, 13)); numLbl.setForeground(TEXT_SEC);
+        
         JLabel nameLbl = new JLabel(s.getName() != null ? s.getName() : s.getUserId());
-        nameLbl.setFont(new Font("SansSerif", Font.PLAIN, 13)); nameLbl.setForeground(TEXT_PRI);
+        nameLbl.setFont(new Font("SansSerif", Font.BOLD, 13)); nameLbl.setForeground(TEXT_PRI);
 
-        JRadioButton present   = styledRadio("Present",   new Color(34, 197, 94));
-        JRadioButton absent    = styledRadio("Absent",    new Color(239, 68, 68));
-        JRadioButton late      = styledRadio("Late",      new Color(245, 158, 11));
-        JRadioButton cancelled = styledRadio("Cancelled", new Color(148, 163, 184));
+        JRadioButton present   = styledRadio("",   new Color(34, 197, 94));
+        JRadioButton absent    = styledRadio("",    new Color(239, 68, 68));
+        JRadioButton late      = styledRadio("",      new Color(245, 158, 11));
+        JRadioButton cancelled = styledRadio("", new Color(148, 163, 184));
+        
         present.setActionCommand("Present"); absent.setActionCommand("Absent");
         late.setActionCommand("Late"); cancelled.setActionCommand("Cancelled");
+        
         ButtonGroup bg = new ButtonGroup();
         bg.add(present); bg.add(absent); bg.add(late); bg.add(cancelled);
         statusGroups.put(s.getUserId(), bg);
+        
         if ("Absent".equalsIgnoreCase(defaultStatus))        absent.setSelected(true);
         else if ("Late".equalsIgnoreCase(defaultStatus))     late.setSelected(true);
         else if ("Cancelled".equalsIgnoreCase(defaultStatus)) cancelled.setSelected(true);
         else                                                  present.setSelected(true);
 
-        JPanel radioPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
-        radioPanel.setBackground(CARD_BG);
+        JPanel radioPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 60, 0));
+        radioPanel.setOpaque(false);
         radioPanel.add(present); radioPanel.add(absent); radioPanel.add(late); radioPanel.add(cancelled);
 
-        row.add(numLbl); row.add(nameLbl); row.add(radioPanel); row.add(new JLabel(""));
+        gbc.weightx = 0.05; gbc.gridx = 0;
+        row.add(numLbl, gbc);
+        
+        gbc.weightx = 0.35; gbc.gridx = 1;
+        row.add(nameLbl, gbc);
+        
+        gbc.weightx = 0.60; gbc.gridx = 2;
+        row.add(radioPanel, gbc);
+
         row.addMouseListener(new java.awt.event.MouseAdapter() {
-            public void mouseEntered(java.awt.event.MouseEvent e) {
-                row.setBackground(new Color(248,250,253)); radioPanel.setBackground(new Color(248,250,253));
-            }
-            public void mouseExited(java.awt.event.MouseEvent e) {
-                row.setBackground(CARD_BG); radioPanel.setBackground(CARD_BG);
-            }
+            public void mouseEntered(java.awt.event.MouseEvent e) { row.setBackground(new Color(248,250,253)); }
+            public void mouseExited(java.awt.event.MouseEvent e) { row.setBackground(CARD_BG); }
         });
         return row;
     }

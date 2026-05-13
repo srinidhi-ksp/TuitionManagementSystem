@@ -5,16 +5,24 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.util.Calendar;
+import java.util.ArrayList;
 import java.util.List;
 import dao.BatchDAO;
 import dao.SubjectDAO;
 import dao.TeacherDAO;
+import dao.TimeslotDAO;
 import model.Batch;
+import model.ScheduleEntry;
 import model.Subject;
 import model.Teacher;
-import util.BatchFormValidator;
+import model.Timeslot;
 
+/**
+ * Batch Management frame — updated per spec §4.
+ * Changes: replaced Start/End time spinners with Timeslot JComboBox,
+ *          replaced single Day dropdown with 7 JCheckBox multi-day selector,
+ *          teacher conflict check uses new hasTeacherConflict() with timeslotId.
+ */
 public class BatchManagementFrame extends JPanel {
 
     private static final Color NAV_BG      = new Color(10, 27, 63);
@@ -24,6 +32,8 @@ public class BatchManagementFrame extends JPanel {
     private static final Color CARD_BG     = Color.WHITE;
     private static final Color TEXT_PRI    = new Color(26, 35, 64);
     private static final Color TEXT_SEC    = new Color(107, 122, 153);
+
+    private static final String[] DAY_NAMES = {"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"};
 
     private JTable batchTable;
     private DefaultTableModel model;
@@ -69,7 +79,7 @@ public class BatchManagementFrame extends JPanel {
         card.setBackground(CARD_BG);
         card.setBorder(BorderFactory.createLineBorder(new Color(225, 230, 240), 1, true));
 
-        String[] cols = {"Batch Name", "Subject ID", "Assigned Teacher", "Timing", "Mode", "Actions"};
+        String[] cols = {"Batch Name", "Subject", "Assigned Teacher", "Schedule", "Mode", "Actions"};
         model = new DefaultTableModel(cols, 0) {
             @Override public boolean isCellEditable(int r, int c) { return c == 5; }
         };
@@ -109,13 +119,61 @@ public class BatchManagementFrame extends JPanel {
     private void refreshTable() {
         model.setRowCount(0);
         currentBatches = new BatchDAO().getAllBatches();
+        SubjectDAO subjectDAO = new SubjectDAO();
+        TeacherDAO teacherDAO = new TeacherDAO();
         for (Batch b : currentBatches) {
-            String timing = b.getTiming() != null ? b.getTiming() : "—";
+            String schedule = buildScheduleSummary(b);
+            Subject subject = subjectDAO.getSubjectById(b.getSubjectId());
+            Teacher teacher = teacherDAO.getTeacherById(b.getTeacherUserId());
             model.addRow(new Object[]{
-                b.getBatchName(), b.getSubjectId(), b.getTeacherUserId(),
-                timing, b.getClassMode(), ""
+                safe(b.getBatchName()),
+                subject != null ? safe(subject.getSubjectName()) : "Not Available",
+                teacher != null ? safe(teacher.getName()) : "Not Available",
+                schedule, safe(b.getClassMode()), ""
             });
         }
+    }
+
+    /** Build a short schedule summary string for the table. */
+    private String buildScheduleSummary(Batch b) {
+        if (b.getScheduleEntries() != null && !b.getScheduleEntries().isEmpty()) {
+            List<String> days = new ArrayList<>();
+            for (ScheduleEntry e : b.getScheduleEntries()) days.add(e.getDay());
+            String tsId = b.getScheduleEntries().get(0).getTimeslotId();
+            // Resolve label
+            Timeslot ts = new TimeslotDAO().findById(tsId);
+            String label = ts != null ? ts.getLabel() : tsId;
+            return String.join(" + ", days) + " | " + safe(label);
+        }
+        return b.getTiming() != null ? b.getTiming() : "—";
+    }
+
+    // ── Batch add/edit dialog ─────────────────────────────────────────────────
+
+    private String safe(String value) {
+        return value == null || value.trim().isEmpty() || value.equalsIgnoreCase("null") || value.equals("â€”")
+            ? "Not Available" : value;
+    }
+
+    private String safeDay(String day) {
+        return day == null || day.trim().isEmpty() ? "Not Available" : day.trim().toUpperCase();
+    }
+
+    private String formatTime(String value) {
+        if (value == null || value.trim().isEmpty()) return "Not Available";
+        String text = value.trim();
+        java.util.List<java.text.SimpleDateFormat> parsers = java.util.Arrays.asList(
+            new java.text.SimpleDateFormat("HH:mm:ss"),
+            new java.text.SimpleDateFormat("HH:mm"),
+            new java.text.SimpleDateFormat("hh:mm a")
+        );
+        for (java.text.SimpleDateFormat parser : parsers) {
+            try {
+                parser.setLenient(false);
+                return new java.text.SimpleDateFormat("hh:mm a").format(parser.parse(text)).toUpperCase();
+            } catch (Exception ignored) {}
+        }
+        return text;
     }
 
     private void openBatchModal(Batch editTarget) {
@@ -123,125 +181,186 @@ public class BatchManagementFrame extends JPanel {
         String title = isEditMode ? "Edit Batch — " + editTarget.getBatchName() : "Add New Batch";
 
         JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), title, true);
-        dialog.setSize(600, 560);
+        dialog.setSize(640, 600);
         dialog.setLocationRelativeTo(this);
         dialog.getContentPane().setBackground(CARD_BG);
         dialog.setLayout(new BorderLayout());
         dialog.add(buildModalTitleBar(title), BorderLayout.NORTH);
 
+        // ── Form ──────────────────────────────────────────────────────────────
         JPanel form = new JPanel(new GridLayout(0, 2, 20, 14));
         form.setBorder(new EmptyBorder(24, 24, 20, 24));
         form.setBackground(CARD_BG);
 
+        // Subject combo
         JComboBox<String> subjectCombo = new JComboBox<>();
         subjectCombo.addItem("Select Subject");
         for (Subject s : new SubjectDAO().getAllSubjects())
             subjectCombo.addItem(s.getSubjectId() + " – " + s.getSubjectName());
 
+        // Teacher combo
         JComboBox<String> teacherCombo = new JComboBox<>();
         teacherCombo.addItem("Select Teacher");
-        // Always load ALL teachers as per requirement
         for (Teacher t : new TeacherDAO().getAllTeachers()) {
             teacherCombo.addItem(t.getUserId() + " – " + (t.getName() != null ? t.getName() : t.getSpecialization()));
         }
 
-        JTextField nameField  = styledField();
-        TimeChooser startPicker = new TimeChooser();
-        TimeChooser endPicker   = new TimeChooser();
-        JTextField linkField  = styledField();
-        JComboBox<String> modeCombo = new JComboBox<>(new String[]{"Select Mode", "Online", "Offline"});
-        JComboBox<String> classLevelCombo = new JComboBox<>(new String[]{"Select Class", "Class 10", "Class 11", "Class 12"});
-        JComboBox<String> dayCombo = new JComboBox<>(new String[]{"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"});
+        // Class level
+        JComboBox<String> classLevelCombo = new JComboBox<>(
+            new String[]{"Select Class", "Class 8", "Class 9", "Class 10", "Class 11", "Class 12"});
 
+        // Class mode
+        JComboBox<String> modeCombo = new JComboBox<>(new String[]{"Select Mode", "Online", "Offline"});
+
+        // Meeting link
+        JTextField linkField = styledField();
+
+        // Batch name
+        JTextField nameField = styledField();
+
+        // ── Time Slot combo — §4.1 ────────────────────────────────────────────
+        List<Timeslot> slots = new TimeslotDAO().findAllOrderedByStart();
+        JComboBox<Timeslot> timeslotCombo = new JComboBox<>(slots.toArray(new Timeslot[0]));
+        timeslotCombo.setRenderer((list, value, index, isSelected, hasFocus) -> {
+            JLabel lbl = new JLabel(value != null ? value.getLabel() : "");
+            lbl.setFont(new Font("SansSerif", Font.PLAIN, 13));
+            lbl.setOpaque(isSelected);
+            if (isSelected) {
+                lbl.setBackground(list.getSelectionBackground());
+                lbl.setForeground(list.getSelectionForeground());
+            }
+            return lbl;
+        });
+
+        // ── Multi-day checkboxes — §4.2 ───────────────────────────────────────
+        JPanel dayPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        dayPanel.setBackground(CARD_BG);
+        JCheckBox[] dayBoxes = new JCheckBox[DAY_NAMES.length];
+        for (int i = 0; i < DAY_NAMES.length; i++) {
+            dayBoxes[i] = new JCheckBox(DAY_NAMES[i]);
+            dayBoxes[i].setFont(new Font("SansSerif", Font.PLAIN, 12));
+            dayBoxes[i].setBackground(CARD_BG);
+            dayPanel.add(dayBoxes[i]);
+        }
+
+        // ── Pre-populate for edit mode ────────────────────────────────────────
         if (isEditMode) {
             nameField.setText(editTarget.getBatchName());
             linkField.setText(editTarget.getMeetingLink());
             modeCombo.setSelectedItem(editTarget.getClassMode());
             classLevelCombo.setSelectedItem(editTarget.getCategory());
-            
-            // Pre-select combos
-            for (int i=0; i<subjectCombo.getItemCount(); i++)
-                if (subjectCombo.getItemAt(i).startsWith(editTarget.getSubjectId() + " –")) subjectCombo.setSelectedIndex(i);
-            for (int i=0; i<teacherCombo.getItemCount(); i++)
-                if (teacherCombo.getItemAt(i).startsWith(editTarget.getTeacherUserId() + " –")) teacherCombo.setSelectedIndex(i);
-            
-            if (editTarget.getStartTime() != null) startPicker.setTime(editTarget.getStartTime());
-            if (editTarget.getEndTime() != null) endPicker.setTime(editTarget.getEndTime());
-            
-            String existingDay = util.ScheduleConflictValidator.extractDayFromTiming(editTarget.getTiming());
-            if (existingDay != null) dayCombo.setSelectedItem(existingDay);
-        } else {
-            Calendar cal = Calendar.getInstance();
-            cal.set(Calendar.HOUR_OF_DAY, 9);
-            cal.set(Calendar.MINUTE, 0);
-            startPicker.setTime(cal.getTime());
-            cal.set(Calendar.HOUR_OF_DAY, 11);
-            endPicker.setTime(cal.getTime());
+
+            // Pre-select subject and teacher
+            for (int i = 0; i < subjectCombo.getItemCount(); i++)
+                if (subjectCombo.getItemAt(i).startsWith(editTarget.getSubjectId() + " –"))
+                    subjectCombo.setSelectedIndex(i);
+            for (int i = 0; i < teacherCombo.getItemCount(); i++)
+                if (teacherCombo.getItemAt(i).startsWith(editTarget.getTeacherUserId() + " –"))
+                    teacherCombo.setSelectedIndex(i);
+
+            // Pre-select timeslot
+            if (editTarget.getTimeslotId() != null) {
+                for (int i = 0; i < timeslotCombo.getItemCount(); i++) {
+                    if (timeslotCombo.getItemAt(i).getId().equals(editTarget.getTimeslotId())) {
+                        timeslotCombo.setSelectedIndex(i);
+                        break;
+                    }
+                }
+            }
+
+            // Pre-check days from scheduleEntries
+            List<String> existingDays = editTarget.getDays();
+            for (int i = 0; i < DAY_NAMES.length; i++) {
+                dayBoxes[i].setSelected(existingDays.contains(DAY_NAMES[i]));
+            }
         }
 
-        form.add(formRow("Batch Name",          nameField));
-        form.add(formRow("Class/Standard",      classLevelCombo));
-        form.add(formRow("Subject",             subjectCombo));
-        form.add(formRow("Assigned Teacher",    teacherCombo));
-        form.add(formRow("Class Mode",          modeCombo));
-        form.add(formRow("Day of Week",         dayCombo));
-        form.add(formRow("Start Time",          startPicker));
-        form.add(formRow("End Time",            endPicker));
-        form.add(formRow("Meeting Link (opt.)", linkField));
+        // ── Layout rows — §4.3 ────────────────────────────────────────────────
+        form.add(formRow("Batch Name",           nameField));
+        form.add(formRow("Class / Standard",     classLevelCombo));
+        form.add(formRow("Subject",              subjectCombo));
+        form.add(formRow("Assigned Teacher",     teacherCombo));
+        form.add(formRow("Class Mode",           modeCombo));
+        form.add(formRow("Time Slot",            timeslotCombo));
+        form.add(formRow("Days of Week",         dayPanel));
+        form.add(formRow("Meeting Link (opt.)",  linkField));
 
+        // ── Button row ────────────────────────────────────────────────────────
         JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 14));
         btnRow.setBackground(PAGE_BG);
         btnRow.add(makeSecondaryButton("Cancel", e -> dialog.dispose()));
         String btnText = isEditMode ? "Update Batch" : "Save Batch";
         btnRow.add(makeAccentButton(btnText, e -> {
             try {
-                // ===== VALIDATE FORM =====
-                String validationError = BatchFormValidator.validateBatchForm(
-                    nameField.getText(),
-                    classLevelCombo,
-                    subjectCombo,
-                    teacherCombo,
-                    modeCombo,
-                    startPicker.getTime(),
-                    endPicker.getTime(),
-                    linkField.getText()
-                );
-
-                if (validationError != null) {
-                    BatchFormValidator.showError(dialog, validationError);
-                    return; // Stop saving if validation fails
+                // ── 1. Basic validation ───────────────────────────────────────
+                if (nameField.getText().trim().isEmpty()) {
+                    showError(dialog, "Batch name is required.");
+                    return;
+                }
+                if (subjectCombo.getSelectedIndex() == 0) {
+                    showError(dialog, "Please select a subject.");
+                    return;
+                }
+                if (teacherCombo.getSelectedIndex() == 0) {
+                    showError(dialog, "Please select a teacher.");
+                    return;
+                }
+                if (modeCombo.getSelectedIndex() == 0) {
+                    showError(dialog, "Please select a class mode.");
+                    return;
+                }
+                if (classLevelCombo.getSelectedIndex() == 0) {
+                    showError(dialog, "Please select a class / standard.");
+                    return;
                 }
 
-                // ===== CHECK TEACHER SCHEDULE CONFLICT =====
+                // ── 2. At least one day checked — §4.2 validation ─────────────
+                List<String> selectedDays = new ArrayList<>();
+                for (int i = 0; i < DAY_NAMES.length; i++) {
+                    if (dayBoxes[i].isSelected()) selectedDays.add(DAY_NAMES[i]);
+                }
+                if (selectedDays.isEmpty()) {
+                    showError(dialog, "Please select at least one day of the week.");
+                    return;
+                }
+
+                // ── 3. Get selected timeslot ──────────────────────────────────
+                Timeslot selectedTs = (Timeslot) timeslotCombo.getSelectedItem();
+                if (selectedTs == null) {
+                    showError(dialog, "Please select a time slot.");
+                    return;
+                }
+
+                // ── 4. Extract teacher ID ─────────────────────────────────────
                 String selT = teacherCombo.getSelectedItem().toString();
                 String teacherId = selT.contains(" – ") ? selT.split(" – ")[0] : null;
-                
+
+                // ── 5. Teacher conflict check — §5 ────────────────────────────
                 if (teacherId != null) {
-                    // Extract day and time from time pickers
-                    // Assuming timing is stored as "MON 09:00 - 11:00" format
-                    String startTimeStr = startPicker.getTimeString();
-                    String endTimeStr = endPicker.getTimeString();
-                    String day = dayCombo.getSelectedItem().toString();
-                    
-                    util.ScheduleConflictValidator.ConflictInfo conflict = 
-                        util.ScheduleConflictValidator.checkTeacherConflict(
-                            teacherId, day, startTimeStr, endTimeStr,
-                            isEditMode ? editTarget.getBatchId() : null
-                        );
-                    
+                    int excludeId = isEditMode ? editTarget.getBatchId() : -1;
+                    Batch conflict = new BatchDAO().hasTeacherConflict(
+                        teacherId, selectedTs.getId(), selectedDays, excludeId);
+
                     if (conflict != null) {
+                        // Find the conflicting day
+                        String conflictDay = selectedDays.stream()
+                            .filter(d -> conflict.getDays().contains(d))
+                            .findFirst().orElse(selectedDays.get(0));
+
                         JOptionPane.showMessageDialog(dialog,
-                            "⚠️ Schedule Conflict!\n\n" +
-                            "This teacher is already assigned to another batch at this time.\n\n" +
-                            "Conflicting Batch:\n" +
-                            conflict.getFormattedMessage() + "\n\n" +
-                            "Please choose a different time.",
-                            "Schedule Conflict", JOptionPane.WARNING_MESSAGE);
-                        return; // Stop saving
+                            "⚠ Teacher Conflict Detected\n\n"
+                            + "\"" + selT.split(" – ")[1] + "\" is already assigned to\n"
+                            + "\"" + conflict.getBatchName() + "\"\n"
+                            + "on " + conflictDay + " at " + selectedTs.getLabel() + ".\n\n"
+                            + "A teacher cannot be assigned to two batches\n"
+                            + "on the same day and time slot.\n\n"
+                            + "Please select a different teacher or time slot.",
+                            "Teacher Conflict", JOptionPane.WARNING_MESSAGE);
+                        return; // Keep form open
                     }
                 }
 
-                // ===== VALIDATION PASSED - SAVE DATA =====
+                // ── 6. Build and save the batch ───────────────────────────────
                 Batch b = isEditMode ? editTarget : new Batch();
                 if (!isEditMode) b.setBatchId((int)(System.currentTimeMillis() % 100000));
                 b.setBatchName(nameField.getText().trim());
@@ -252,24 +371,38 @@ public class BatchManagementFrame extends JPanel {
                 if (selT.contains(" – ")) b.setTeacherUserId(selT.split(" – ")[0]);
 
                 b.setClassMode(modeCombo.getSelectedItem().toString());
-                b.setStartTime(startPicker.getTime());
-                b.setEndTime(endPicker.getTime());
-                String day = dayCombo.getSelectedItem().toString();
-                String startT = startPicker.getTimeString();
-                String endT = endPicker.getTimeString();
-                b.setTiming(day + " " + startT + " - " + endT);
-                
-                java.util.List<model.Schedule> scList = new java.util.ArrayList<>();
-                scList.add(new model.Schedule(day, startT, endT));
-                b.setSchedules(scList);
-                
                 b.setMeetingLink(linkField.getText().trim());
+                b.setTimeslotId(selectedTs.getId());
+
+                // Build scheduleEntries
+                List<ScheduleEntry> entries = new ArrayList<>();
+                for (String day : selectedDays) {
+                    entries.add(new ScheduleEntry(day, selectedTs.getId()));
+                }
+                b.setScheduleEntries(entries);
+
+                // Also set timing string for legacy display compat
+                b.setTiming(String.join("+", selectedDays) + " " + selectedTs.getLabel());
+
+                // Extract standard from category
+                String cat = b.getCategory();
+                if (cat != null && cat.toLowerCase().startsWith("class ")) {
+                    b.setStandard(cat.substring(6).trim());
+                } else {
+                    b.setStandard(cat);
+                }
 
                 boolean ok = isEditMode ? new BatchDAO().updateBatch(b) : new BatchDAO().addBatch(b);
                 if (ok) {
-                    JOptionPane.showMessageDialog(dialog, "✅ Batch " + (isEditMode ? "updated" : "saved") + " successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
-                    refreshTable(); dialog.dispose();
-                } else JOptionPane.showMessageDialog(dialog, "Failed to save batch.", "Error", JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(dialog,
+                        "✅ Batch " + (isEditMode ? "updated" : "saved") + " successfully!",
+                        "Success", JOptionPane.INFORMATION_MESSAGE);
+                    refreshTable();
+                    dialog.dispose();
+                } else {
+                    JOptionPane.showMessageDialog(dialog, "Failed to save batch.", "Error", JOptionPane.ERROR_MESSAGE);
+                }
+
             } catch (Exception ex) {
                 JOptionPane.showMessageDialog(dialog, "Error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
@@ -280,6 +413,11 @@ public class BatchManagementFrame extends JPanel {
         dialog.setVisible(true);
     }
 
+    // ── Helper methods ────────────────────────────────────────────────────────
+
+    private void showError(JDialog parent, String msg) {
+        JOptionPane.showMessageDialog(parent, msg, "Validation Error", JOptionPane.WARNING_MESSAGE);
+    }
 
     private void styleTable(JTable t) {
         t.setFont(new Font("SansSerif", Font.PLAIN, 13));
@@ -303,8 +441,11 @@ public class BatchManagementFrame extends JPanel {
 
     private JPanel buildCardHeader(String text) {
         JPanel p = new JPanel(new BorderLayout()); p.setBackground(CARD_BG);
-        p.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(230, 235, 245)), new EmptyBorder(14, 20, 14, 20)));
-        JLabel lbl = new JLabel(text); lbl.setFont(new Font("SansSerif", Font.BOLD, 15)); lbl.setForeground(TEXT_PRI);
+        p.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(230, 235, 245)),
+            new EmptyBorder(14, 20, 14, 20)));
+        JLabel lbl = new JLabel(text);
+        lbl.setFont(new Font("SansSerif", Font.BOLD, 15)); lbl.setForeground(TEXT_PRI);
         p.add(lbl, BorderLayout.WEST); return p;
     }
 
@@ -318,17 +459,24 @@ public class BatchManagementFrame extends JPanel {
         JPanel p = new JPanel(new BorderLayout(0, 5)); p.setBackground(CARD_BG);
         JLabel lbl = new JLabel(label); lbl.setFont(new Font("SansSerif", Font.BOLD, 11)); lbl.setForeground(TEXT_SEC);
         if (comp instanceof JTextField)
-            comp.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(new Color(200, 210, 225), 1, true), new EmptyBorder(6, 10, 6, 10)));
-        comp.setPreferredSize(new Dimension(0, 36)); p.add(lbl, BorderLayout.NORTH); p.add(comp, BorderLayout.CENTER); return p;
+            comp.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(200, 210, 225), 1, true),
+                new EmptyBorder(6, 10, 6, 10)));
+        comp.setPreferredSize(new Dimension(0, 36));
+        p.add(lbl, BorderLayout.NORTH); p.add(comp, BorderLayout.CENTER); return p;
     }
 
-    private JTextField styledField() { return new JTextField() {{ setFont(new Font("SansSerif", Font.PLAIN, 13)); setForeground(TEXT_PRI); }}; }
+    private JTextField styledField() {
+        return new JTextField() {{ setFont(new Font("SansSerif", Font.PLAIN, 13)); setForeground(TEXT_PRI); }};
+    }
 
     private JButton makeAccentButton(String text, java.awt.event.ActionListener al) {
         JButton btn = new JButton(text) {
             @Override protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create(); g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(getModel().isRollover() ? ACCENT_DARK : ACCENT); g2.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(getModel().isRollover() ? ACCENT_DARK : ACCENT);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
                 super.paintComponent(g2); g2.dispose();
             }
         };
@@ -341,7 +489,8 @@ public class BatchManagementFrame extends JPanel {
     private JButton makeSecondaryButton(String text, java.awt.event.ActionListener al) {
         JButton btn = new JButton(text); btn.setBackground(CARD_BG); btn.setForeground(ACCENT);
         btn.setFont(new Font("SansSerif", Font.BOLD, 13)); btn.setFocusPainted(false);
-        btn.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(ACCENT, 1, true), new EmptyBorder(6, 16, 6, 16)));
+        btn.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(ACCENT, 1, true), new EmptyBorder(6, 16, 6, 16)));
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR)); if (al != null) btn.addActionListener(al); return btn;
     }
 }

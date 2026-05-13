@@ -3,7 +3,8 @@ package model;
 import java.util.Date;
 
 /**
- * Salary Record model for tracking teacher payments
+ * Salary Record model for tracking teacher payments.
+ * Extended with extra_slots and extra_bonus fields per requirements §7.3.
  */
 public class SalaryRecord {
     private String id; // SAL_T001_2026_05
@@ -17,6 +18,10 @@ public class SalaryRecord {
     private double deduction;
     private double finalSalary;
     private Date lastUpdated;
+
+    // NEW fields — §7.3
+    private int extraSlots;    // count of extra slots taught in the month
+    private double extraBonus; // extraSlots × bonusPerExtraSlot
 
     public SalaryRecord() {}
 
@@ -53,4 +58,10 @@ public class SalaryRecord {
 
     public Date getLastUpdated() { return lastUpdated; }
     public void setLastUpdated(Date lastUpdated) { this.lastUpdated = lastUpdated; }
+
+    public int getExtraSlots() { return extraSlots; }
+    public void setExtraSlots(int extraSlots) { this.extraSlots = extraSlots; }
+
+    public double getExtraBonus() { return extraBonus; }
+    public void setExtraBonus(double extraBonus) { this.extraBonus = extraBonus; }
 }

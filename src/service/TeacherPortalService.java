@@ -196,20 +196,24 @@ public class TeacherPortalService {
     }
 
     private int countStudents(List<Batch> batches) {
-        int total = 0;
+        Set<String> studentIds = new LinkedHashSet<>();
         for (Batch batch : batches) {
-            total += enrollmentDAO.getEnrollmentCountByBatch(batch.getBatchId());
+            for (Enrollment enrollment : enrollmentDAO.getActiveEnrollmentsByBatchId(batch.getBatchId())) {
+                if (enrollment.getStudentUserId() != null) {
+                    studentIds.add(enrollment.getStudentUserId());
+                }
+            }
         }
-        return total;
+        return studentIds.size();
     }
 
     private List<ScheduleItem> getTodayClasses(List<Batch> batches) {
         List<ScheduleItem> items = new ArrayList<>();
-        String today = new SimpleDateFormat("EEE").format(new Date()).toUpperCase();
+        String today = normalizeDay(new SimpleDateFormat("EEEE").format(new Date()));
         for (Batch batch : batches) {
             if (batch.getSchedules() == null) continue;
             for (model.Schedule schedule : batch.getSchedules()) {
-                if (schedule.getDay() != null && today.equalsIgnoreCase(schedule.getDay())) {
+                if (schedule.getDay() != null && today.equals(normalizeDay(schedule.getDay()))) {
                     ScheduleItem item = new ScheduleItem();
                     item.batch = batch;
                     item.schedule = schedule;
@@ -218,6 +222,13 @@ public class TeacherPortalService {
             }
         }
         return items;
+    }
+
+    private String normalizeDay(String day) {
+        if (day == null) return "";
+        String value = day.trim().toUpperCase();
+        if (value.length() >= 3) value = value.substring(0, 3);
+        return value;
     }
 
     private String toDbStatus(String status) {

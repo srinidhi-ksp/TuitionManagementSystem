@@ -144,7 +144,7 @@ public class AttendanceDAO {
         if (attendanceCollection == null) return list;
         try (MongoCursor<Document> cursor = attendanceCollection.find(
                 Filters.and(
-                    Filters.eq("batch_id", batchId),
+                    batchIdFilter(batchId),
                     Filters.eq("date_str", dateStr)
                 )).iterator()) {
             while (cursor.hasNext()) {
@@ -170,7 +170,7 @@ public class AttendanceDAO {
             attendanceCollection.replaceOne(
                 Filters.and(
                     Filters.eq("user_id",  att.getUserId()),
-                    Filters.eq("batch_id", batchId),
+                    batchIdFilter(batchId),
                     Filters.eq("date_str", dateStr)
                 ),
                 doc,
@@ -188,7 +188,7 @@ public class AttendanceDAO {
         try {
             return attendanceCollection.countDocuments(
                 Filters.and(
-                    Filters.eq("batch_id", batchId),
+                    batchIdFilter(batchId),
                     Filters.eq("date_str", dateStr),
                     Filters.eq("type", "STUDENT")
                 )
@@ -221,7 +221,7 @@ public class AttendanceDAO {
                 attendanceCollection.replaceOne(
                     Filters.and(
                         Filters.eq("student_id", studentId),
-                        Filters.eq("batch_id", batchId),
+                        batchIdFilter(batchId),
                         Filters.eq("date_str", dateStr),
                         Filters.eq("type", "STUDENT")
                     ),
@@ -229,30 +229,91 @@ public class AttendanceDAO {
                     new ReplaceOptions().upsert(true)
                 );
             }
-            // TRIGGER LOW ATTENDANCE NOTIFICATIONS
+            // TRIGGER ABSENCE + LOW-ATTENDANCE NOTIFICATIONS
+            final String capturedTeacherId = teacherId;
+            final int capturedBatchId = batchId;
+            final String capturedDateStr = dateStr;
+            final java.util.Map<String,String> capturedStatuses = new java.util.HashMap<>(studentStatuses);
             new Thread(() -> {
                 try {
                     MongoDatabase db = DBConnection.getDatabase();
                     if (db == null) return;
-                    for (String studentId : studentStatuses.keySet()) {
+
+                    // Resolve batch name for messages
+                    Document batchDoc = db.getCollection("batches").find(
+                        batchDocIdFilter(capturedBatchId)).first();
+                    String batchName = batchDoc != null ? batchDoc.getString("batch_name") : "Batch " + capturedBatchId;
+                    String subjectName = "";
+                    if (batchDoc != null) {
+                        Object subId = batchDoc.get("subject_id");
+                        if (subId != null) {
+                            Document subDoc = db.getCollection("subjects").find(
+                                Filters.eq("_id", subId)).first();
+                            if (subDoc != null) subjectName = subDoc.getString("name") != null
+                                ? subDoc.getString("name") : String.valueOf(subDoc.get("name"));
+                        }
+                    }
+
+                    String dateLabel = "";
+                    try {
+                        java.util.Date pd = new java.text.SimpleDateFormat("yyyy-MM-dd").parse(capturedDateStr);
+                        dateLabel = new java.text.SimpleDateFormat("EEEE, dd MMM yyyy").format(pd);
+                    } catch (Exception ignored) { dateLabel = capturedDateStr; }
+
+                    service.NotificationService ns = service.NotificationService.getInstance();
+
+                    for (java.util.Map.Entry<String,String> e : capturedStatuses.entrySet()) {
+                        String studentId = e.getKey();
+                        String status    = e.getValue();
+
+                        Document studentDoc = db.getCollection("students").find(
+                            Filters.or(Filters.eq("_id", studentId),
+                                       Filters.eq("user_id", studentId))).first();
+                        if (studentDoc == null) continue;
+
+                        String studentName = studentDoc.getString("full_name");
+                        String parentId    = studentDoc.getString("parent_user_id");
+                        if (parentId == null) {
+                            Document pe = (Document) studentDoc.get("parent");
+                            parentId = pe != null ? pe.getString("parent_id") : null;
+                        }
+
+                        if ("ABSENT".equalsIgnoreCase(status) || "LEAVE".equalsIgnoreCase(status)) {
+                            String label = "LEAVE".equalsIgnoreCase(status) ? "on leave" : "absent";
+
+                            ns.push(new service.NotificationDocument(
+                                service.NotificationService.ROLE_STUDENT, studentId,
+                                service.NotificationService.ATTENDANCE_ABSENT,
+                                "Attendance Marked — " + ("LEAVE".equalsIgnoreCase(status) ? "On Leave" : "Absent"),
+                                String.format("You were marked %s for '%s' (%s) on %s. " +
+                                    "If this is incorrect, please contact administration.",
+                                    label, batchName, subjectName, dateLabel))
+                                .studentId(studentId).studentName(studentName)
+                                .batchId(String.valueOf(capturedBatchId)).subject(subjectName));
+
+                            if (parentId != null) {
+                                ns.push(new service.NotificationDocument(
+                                    service.NotificationService.ROLE_PARENT, parentId,
+                                    service.NotificationService.ATTENDANCE_ABSENT,
+                                    "Attendance Alert — " + ("LEAVE".equalsIgnoreCase(status) ? "On Leave" : "Absent"),
+                                    String.format("Your ward %s was marked %s for '%s' (%s) on %s. " +
+                                        "If you have any concern, please contact MRK Tuition.",
+                                        studentName, label, batchName, subjectName, dateLabel))
+                                    .studentId(studentId).studentName(studentName)
+                                    .batchId(String.valueOf(capturedBatchId)).subject(subjectName));
+                            }
+                        }
+
+                        // Low attendance check (fires separately)
                         double percent = getAttendancePercentage(studentId);
                         if (percent < 75.0) {
-                            Document studentDoc = db.getCollection("students").find(Filters.eq("_id", studentId)).first();
-                            if (studentDoc != null) {
-                                String parentId = studentDoc.getString("parent_user_id");
-                                if (parentId == null) {
-                                    Document parentEmbed = (Document) studentDoc.get("parent");
-                                    parentId = parentEmbed != null ? parentEmbed.getString("parent_id") : null;
-                                }
-                                String studentName = studentDoc.getString("full_name");
-                                if (parentId != null) {
-                                    new service.NotificationService().notifyLowAttendance(parentId, studentId, studentName, percent);
-                                }
-                            }
+                            ns.notifyLowAttendance(
+                                parentId != null ? parentId : "",
+                                studentId, studentName, percent);
                         }
                     }
                 } catch (Exception ex) {
-                    System.err.println("[AttendanceDAO] Trigger Error: " + ex.getMessage());
+                    System.err.println("[AttendanceDAO] Notification error: " + ex.getMessage());
                 }
             }).start();
             
@@ -343,5 +404,21 @@ public class AttendanceDAO {
         } catch (Exception ignored) {
             return new java.util.Date();
         }
+    }
+
+    private org.bson.conversions.Bson batchIdFilter(int batchId) {
+        return Filters.or(
+            Filters.eq("batch_id", batchId),
+            Filters.eq("batch_id", String.valueOf(batchId)),
+            Filters.eq("batch_id", String.format("B%03d", batchId))
+        );
+    }
+
+    private org.bson.conversions.Bson batchDocIdFilter(int batchId) {
+        return Filters.or(
+            Filters.eq("_id", batchId),
+            Filters.eq("_id", String.valueOf(batchId)),
+            Filters.eq("_id", String.format("B%03d", batchId))
+        );
     }
 }

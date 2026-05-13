@@ -98,12 +98,16 @@ public class AdminProfilePanel extends JPanel {
         info.setOpaque(false);
 
         // Display teacher name if available, fallback to user name
-        String displayName = (teacher != null && teacher.getName() != null) ? teacher.getName() : safe(currentUser.getName());
+        String displayName = firstAvailable(
+            teacher != null ? teacher.getName() : null,
+            currentUser.getName(),
+            currentUser.getEmail()
+        );
         JLabel nameLabel = new JLabel(displayName);
         nameLabel.setFont(new Font("SansSerif", Font.BOLD, 22));
         nameLabel.setForeground(TEXT_PRI);
 
-        JLabel emailLabel = new JLabel(safe(currentUser.getEmail()));
+        JLabel emailLabel = new JLabel(firstAvailable(currentUser.getEmail(), teacher != null ? teacher.getEmail() : null));
         emailLabel.setFont(new Font("SansSerif", Font.PLAIN, 14));
         emailLabel.setForeground(TEXT_SEC);
 
@@ -170,15 +174,15 @@ public class AdminProfilePanel extends JPanel {
         String teacherId = (teacher != null && teacher.getUserId() != null) ? teacher.getUserId() : currentUser.getUserId();
         map.put("Teacher ID:", teacherId);
         
-        String spec = (teacher != null && teacher.getSpecialization() != null) ? teacher.getSpecialization() : "-";
+        String spec = (teacher != null && teacher.getSpecialization() != null) ? teacher.getSpecialization() : "Not Available";
         map.put("Specialization:", spec);
         
         String quals = (teacher != null && teacher.getQualifications() != null && !teacher.getQualifications().isEmpty()) 
-                       ? String.join(", ", teacher.getQualifications()) : "-";
+                       ? String.join(", ", teacher.getQualifications()) : firstAvailable(teacher != null ? teacher.getHighestDegree() : null);
         map.put("Qualifications:", quals);
         
         // Use experience_years from database if available
-        String experience = "-";
+        String experience = "Not Available";
         if (teacher != null && teacher.getExperience() > 0) {
             experience = teacher.getExperience() + " years";
         } else if (currentUser.getCreatedAt() != null) {
@@ -200,11 +204,11 @@ public class AdminProfilePanel extends JPanel {
         }
         map.put("Experience:", experience);
 
-        String joinDateStr = "-";
+        String joinDateStr = "Not Available";
         if (teacher != null && teacher.getJoinDate() != null && !teacher.getJoinDate().equals("-")) {
             joinDateStr = teacher.getJoinDate();
         } else if (currentUser.getCreatedAt() != null) {
-            joinDateStr = new java.text.SimpleDateFormat("dd MMM yyyy").format(currentUser.getCreatedAt());
+            joinDateStr = new java.text.SimpleDateFormat("dd-MM-yyyy hh:mm a").format(currentUser.getCreatedAt());
         }
         map.put("Join Date:", joinDateStr);
         
@@ -213,8 +217,8 @@ public class AdminProfilePanel extends JPanel {
 
     private java.util.Map<String, String> getContactInfoMap() {
         java.util.Map<String, String> map = new java.util.LinkedHashMap<>();
-        map.put("Phone:", (teacher != null && teacher.getPhone() != null) ? teacher.getPhone() : safe(currentUser.getPhone()));
-        map.put("Email:", (teacher != null && teacher.getEmail() != null) ? teacher.getEmail() : currentUser.getEmail());
+        map.put("Phone:", firstAvailable(teacher != null ? teacher.getPhone() : null, currentUser.getPhone()));
+        map.put("Email:", firstAvailable(teacher != null ? teacher.getEmail() : null, currentUser.getEmail()));
         if (teacher != null && teacher.getCity() != null) {
             map.put("City:", teacher.getCity());
         }
@@ -222,7 +226,16 @@ public class AdminProfilePanel extends JPanel {
     }
 
     private String safe(String value) {
-        return (value == null || value.trim().isEmpty() || value.equalsIgnoreCase("null") || value.equals("N/A")) ? "-" : value;
+        return (value == null || value.trim().isEmpty() || value.equalsIgnoreCase("null") || value.equals("N/A") || value.equals("-"))
+            ? "Not Available" : value;
+    }
+
+    private String firstAvailable(String... values) {
+        for (String value : values) {
+            String safeValue = safe(value);
+            if (!"Not Available".equals(safeValue)) return safeValue;
+        }
+        return "Not Available";
     }
 
     private void loadAdminData() {
@@ -240,9 +253,16 @@ public class AdminProfilePanel extends JPanel {
 
             if (user != null) {
                 currentUser.setEmail(user.getString("email"));
+                String fullName = user.getString("full_name");
+                if (fullName == null) fullName = user.getString("name");
+                currentUser.setName(fullName);
                 
                 Object phoneObj = user.get("phone");
-                currentUser.setPhone(phoneObj != null ? phoneObj.toString() : "-");
+                if (phoneObj == null) {
+                    List<String> phones = user.getList("phones", String.class);
+                    if (phones != null && !phones.isEmpty()) phoneObj = phones.get(0);
+                }
+                currentUser.setPhone(phoneObj != null ? phoneObj.toString() : null);
 
                 List<String> roles = user.getList("roles", String.class);
                 if (roles != null && !roles.isEmpty()) {
@@ -257,7 +277,11 @@ public class AdminProfilePanel extends JPanel {
             
             // 2. Get Teacher Data (if admin is also a teacher)
             MongoCollection<Document> teacherCol = database.getCollection("teachers");
-            Document teacherDoc = teacherCol.find(Filters.eq("_id", adminId)).first();
+            Document teacherDoc = teacherCol.find(Filters.or(
+                Filters.eq("user_id", adminId),
+                Filters.eq("_id", adminId),
+                Filters.eq("email", currentUser.getEmail())
+            )).first();
 
             if (teacherDoc != null) {
                 this.teacher = db.DocumentMapper.documentToTeacher(teacherDoc);

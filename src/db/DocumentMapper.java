@@ -28,6 +28,15 @@ public class DocumentMapper {
         System.out.println("[DocumentMapper] Mapping user: " + userId);
         
         user.setEmail(doc.getString("email"));
+        String fullName = doc.getString("full_name");
+        if (fullName == null) fullName = doc.getString("name");
+        user.setName(fullName);
+        String phone = doc.getString("phone");
+        if (phone == null) {
+            List<String> phones = doc.getList("phones", String.class);
+            if (phones != null && !phones.isEmpty()) phone = phones.get(0);
+        }
+        user.setPhone(phone);
         user.setPassword(doc.getString("password"));
         
         // ✅ Get roles as a List (ARRAY from MongoDB)
@@ -151,6 +160,7 @@ public class DocumentMapper {
         Teacher t = new Teacher();
         Object idObj = doc.get("_id");
         t.setUserId(idObj != null ? idObj.toString() : null); // Maps like T001
+        t.setAuthUserId(doc.getString("user_id"));
         t.setName(doc.getString("full_name"));
         // ✅ CRITICAL: read email so getCreatedAtByEmail() can look up users.created_at
         t.setEmail(doc.getString("email"));
@@ -178,6 +188,13 @@ public class DocumentMapper {
 
         // ── Qualifications list ──
         List<String> quals = doc.getList("qualifications", String.class);
+        if (quals == null) {
+            String qualification = doc.getString("qualification");
+            if (qualification != null && !qualification.trim().isEmpty()) {
+                quals = new ArrayList<>();
+                quals.add(qualification);
+            }
+        }
         if (quals != null) t.setQualifications(quals);
 
         Object expObj = doc.get("experience_years");
@@ -187,7 +204,9 @@ public class DocumentMapper {
             t.setExperience(0);
         }
 
-        t.setHighestDegree(doc.getString("highest_degree"));
+        String highestDegree = doc.getString("highest_degree");
+        if (highestDegree == null) highestDegree = doc.getString("qualification");
+        t.setHighestDegree(highestDegree);
 
         // ── Salary: prefer flat number field (from bulkWrite), fallback to nested doc ──
         Object flatSalObj = doc.get("salary");
@@ -216,6 +235,7 @@ public class DocumentMapper {
     public static Document teacherToDocument(Teacher teacher) {
         Document doc = new Document();
         if (teacher.getUserId() != null) doc.append("_id", teacher.getUserId());
+        if (teacher.getAuthUserId() != null) doc.append("user_id", teacher.getAuthUserId());
 
         doc.append("full_name",      teacher.getName());
         doc.append("specialization", teacher.getSpecialization());
@@ -254,19 +274,50 @@ public class DocumentMapper {
     public static model.Subject documentToSubject(Document doc) {
         if (doc == null) return null;
         model.Subject s = new model.Subject();
-        // ID could be integer or string, checking the notepad dataset, _id: 1, 2, ...
         Object idObj = doc.get("_id");
         if (idObj instanceof Number) {
             s.setSubjectId(((Number) idObj).intValue());
         } else if (idObj != null) {
-            try {
-                s.setSubjectId(Integer.parseInt(idObj.toString()));
-            } catch (Exception e) {}
+            String str = idObj.toString().replaceAll("\\D+", "");
+            if (!str.isEmpty()) s.setSubjectId(Integer.parseInt(str));
         }
         
-        s.setSubjectName(doc.getString("subject_name"));
+        String subjectName = doc.getString("subject_name");
+        if (subjectName == null) subjectName = doc.getString("name");
+        s.setSubjectName(subjectName);
         s.setCategory(doc.getString("category"));
-        s.setMonthlyFee(doc.get("monthly_fee") instanceof Number ? ((Number)doc.get("monthly_fee")).doubleValue() : 0.0);
+        Object feeObj = doc.get("monthly_fee");
+        if (feeObj == null) feeObj = doc.get("fee");
+        
+        if (feeObj instanceof Number) {
+            s.setMonthlyFee(((Number) feeObj).doubleValue());
+        } else if (feeObj != null) {
+            try { 
+                s.setMonthlyFee(Double.parseDouble(feeObj.toString())); 
+            } catch (Exception ignored) {
+                // Try extracting from 'fees' object if monthly_fee is not a plain number
+                Document fees = (Document) doc.get("fees");
+                if (fees != null && !fees.isEmpty()) {
+                    for (String key : fees.keySet()) {
+                        if (fees.get(key) instanceof Number) {
+                            s.setMonthlyFee(((Number) fees.get(key)).doubleValue());
+                            break;
+                        }
+                    }
+                }
+            }
+        } else {
+            // feeObj is null, try fees object directly
+            Document fees = (Document) doc.get("fees");
+            if (fees != null && !fees.isEmpty()) {
+                for (String key : fees.keySet()) {
+                    if (fees.get(key) instanceof Number) {
+                        s.setMonthlyFee(((Number) fees.get(key)).doubleValue());
+                        break;
+                    }
+                }
+            }
+        }
         s.setStatus(doc.getString("status"));
         s.setSyllabusVersion(doc.getString("syllabus_version"));
         
@@ -318,12 +369,20 @@ public class DocumentMapper {
         model.Batch b = new model.Batch();
 
         Object idObj = doc.get("_id");
-        if (idObj instanceof Number) b.setBatchId(((Number) idObj).intValue());
-        else if (idObj != null) try { b.setBatchId(Integer.parseInt(idObj.toString())); } catch (Exception e) {}
+        if (idObj instanceof Number) {
+            b.setBatchId(((Number) idObj).intValue());
+        } else if (idObj != null) {
+            String str = idObj.toString().replaceAll("\\D+", "");
+            if (!str.isEmpty()) b.setBatchId(Integer.parseInt(str));
+        }
 
         Object subjObj = doc.get("subject_id");
-        if (subjObj instanceof Number) b.setSubjectId(((Number) subjObj).intValue());
-        else if (subjObj != null) try { b.setSubjectId(Integer.parseInt(subjObj.toString())); } catch (Exception e) {}
+        if (subjObj instanceof Number) {
+            b.setSubjectId(((Number) subjObj).intValue());
+        } else if (subjObj != null) {
+            String str = subjObj.toString().replaceAll("\\D+", "");
+            if (!str.isEmpty()) b.setSubjectId(Integer.parseInt(str));
+        }
 
         b.setTeacherUserId(doc.getString("teacher_id"));
         b.setBatchName(doc.getString("batch_name"));
@@ -348,11 +407,13 @@ public class DocumentMapper {
 
                 if (item instanceof Document) {
                     Document sDoc = (Document) item;
-                    day = sDoc.getString("day");
+                    day = normalizeDay(sDoc.getString("day"));
                     start = sDoc.getString("start");
                     end = sDoc.getString("end");
                     if (start == null) start = sDoc.getString("start_time");
                     if (end == null) end = sDoc.getString("end_time");
+                    if (start == null) start = sDoc.getString("startTime");
+                    if (end == null) end = sDoc.getString("endTime");
                 } else if (item instanceof java.util.Map) {
                     java.util.Map<?, ?> map = (java.util.Map<?, ?>) item;
                     Object dayObj = map.get("day");
@@ -360,13 +421,13 @@ public class DocumentMapper {
                     Object endObj = map.get("end");
                     if (startObj == null) startObj = map.get("start_time");
                     if (endObj == null) endObj = map.get("end_time");
-                    day = dayObj != null ? dayObj.toString() : null;
+                    day = normalizeDay(dayObj != null ? dayObj.toString() : null);
                     start = startObj != null ? startObj.toString() : null;
                     end = endObj != null ? endObj.toString() : null;
                 } else if (item instanceof java.util.List) {
                     java.util.List<?> inner = (java.util.List<?>) item;
                     if (inner.size() >= 3) {
-                        day = inner.get(0) != null ? inner.get(0).toString() : null;
+                        day = normalizeDay(inner.get(0) != null ? inner.get(0).toString() : null);
                         start = inner.get(1) != null ? inner.get(1).toString() : null;
                         end = inner.get(2) != null ? inner.get(2).toString() : null;
                     }
@@ -377,10 +438,27 @@ public class DocumentMapper {
                     sc.setDay(day);
                     sc.setStart(start);
                     sc.setEnd(end);
+                    if (item instanceof Document) {
+                        Document sDoc = (Document) item;
+                        String tsId = sDoc.getString("timeslot_id");
+                        if (tsId == null) tsId = sDoc.getString("timeslotId");
+                        sc.setTimeslotId(tsId);
+                    }
                     schedules.add(sc);
                 }
             }
             b.setSchedules(schedules);
+
+            java.util.List<model.ScheduleEntry> entries = new java.util.ArrayList<>();
+            for (model.Schedule sc : schedules) {
+                if (sc.getDay() != null && sc.getTimeslotId() != null) {
+                    entries.add(new model.ScheduleEntry(sc.getDay(), sc.getTimeslotId()));
+                }
+            }
+            if (!entries.isEmpty()) {
+                b.setScheduleEntries(entries);
+                b.setTimeslotId(entries.get(0).getTimeslotId());
+            }
             
             // If timing is null, derive it from the first schedule entry
             if (b.getTiming() == null && !schedules.isEmpty()) {
@@ -394,7 +472,9 @@ public class DocumentMapper {
             if (sStr == null) sStr = schedule.getString("start");
             String eStr = schedule.getString("end_time");
             if (eStr == null) eStr = schedule.getString("end");
-            String day = schedule.getString("day");
+            String day = normalizeDay(schedule.getString("day"));
+            String tsId = schedule.getString("timeslot_id");
+            if (tsId == null) tsId = schedule.getString("timeslotId");
             
             if (b.getTiming() == null && sStr != null && eStr != null) {
                 b.setTiming((day != null ? day + " " : "") + sStr + " - " + eStr);
@@ -402,8 +482,16 @@ public class DocumentMapper {
             
             // Still populate the list for consistency
             java.util.List<model.Schedule> schedules = new java.util.ArrayList<>();
-            schedules.add(new model.Schedule(day, sStr, eStr));
+            model.Schedule sc = new model.Schedule(day, sStr, eStr);
+            sc.setTimeslotId(tsId);
+            schedules.add(sc);
             b.setSchedules(schedules);
+            if (day != null && tsId != null) {
+                java.util.List<model.ScheduleEntry> entries = new java.util.ArrayList<>();
+                entries.add(new model.ScheduleEntry(day, tsId));
+                b.setScheduleEntries(entries);
+                b.setTimeslotId(tsId);
+            }
         }
 
         // ── If timing still null, derive from Date start/end ──
@@ -432,6 +520,19 @@ public class DocumentMapper {
         return b;
     }
 
+    private static String normalizeDay(String day) {
+        if (day == null) return null;
+        String value = day.trim().toUpperCase();
+        if (value.startsWith("MON")) return "MON";
+        if (value.startsWith("TUE")) return "TUE";
+        if (value.startsWith("WED")) return "WED";
+        if (value.startsWith("THU")) return "THU";
+        if (value.startsWith("FRI")) return "FRI";
+        if (value.startsWith("SAT")) return "SAT";
+        if (value.startsWith("SUN")) return "SUN";
+        return value;
+    }
+
     public static Document batchToDocument(model.Batch batch) {
         Document doc = new Document();
         doc.append("_id",         batch.getBatchId());
@@ -446,14 +547,29 @@ public class DocumentMapper {
         doc.append("standard",    batch.getStandard());
         doc.append("status",      batch.getStatus() != null ? batch.getStatus() : "ACTIVE");
         
-        // Persist schedule list if present
-        if (batch.getSchedules() != null && !batch.getSchedules().isEmpty()) {
+        // Persist schedule list if present. Prefer scheduleEntries because the admin
+        // timetable groups by day + timeslot_id.
+        if (batch.getScheduleEntries() != null && !batch.getScheduleEntries().isEmpty()) {
+            java.util.List<Document> sDocs = new java.util.ArrayList<>();
+            for (model.ScheduleEntry e : batch.getScheduleEntries()) {
+                Document sDoc = new Document();
+                sDoc.append("day", e.getDay());
+                sDoc.append("timeslot_id", e.getTimeslotId());
+                sDoc.append("timeslotId", e.getTimeslotId());
+                sDocs.add(sDoc);
+            }
+            doc.append("schedule", sDocs);
+        } else if (batch.getSchedules() != null && !batch.getSchedules().isEmpty()) {
             java.util.List<Document> sDocs = new java.util.ArrayList<>();
             for (model.Schedule s : batch.getSchedules()) {
                 Document sDoc = new Document();
                 sDoc.append("day", s.getDay());
                 sDoc.append("start", s.getStart());
                 sDoc.append("end", s.getEnd());
+                if (s.getTimeslotId() != null) {
+                    sDoc.append("timeslot_id", s.getTimeslotId());
+                    sDoc.append("timeslotId", s.getTimeslotId());
+                }
                 sDocs.add(sDoc);
             }
             doc.append("schedule", sDocs);
@@ -493,8 +609,7 @@ public class DocumentMapper {
         
         return a;
     }
-
-    public static Document attendanceToDocument(model.Attendance att) {
+    public static Document attendanceToDocument(model.Attendance att) {
         Document doc = new Document();
         doc.append("_id", att.getAttendanceId());
         doc.append("user_id", att.getUserId());
@@ -505,38 +620,32 @@ public class DocumentMapper {
         return doc;
     }
 
-    // ====================================
-    // ENROLLMENT MAPPER
-    // ====================================
     public static model.Enrollment documentToEnrollment(Document doc) {
         if (doc == null) return null;
         model.Enrollment e = new model.Enrollment();
-        
         Object idObj = doc.get("_id");
         if (idObj instanceof Number) e.setEnrollmentId(((Number) idObj).intValue());
-        else if (idObj != null) try { e.setEnrollmentId(Integer.parseInt(idObj.toString())); } catch (Exception ex) {}
-        
+        else if (idObj != null) {
+            try { e.setEnrollmentId(Integer.parseInt(idObj.toString().replaceAll("\\D", ""))); } catch (Exception ex) {}
+        }
         e.setStudentUserId(doc.getString("student_user_id"));
-        // Try all possible field names the DB may use
         if (e.getStudentUserId() == null) e.setStudentUserId(doc.getString("student_id"));
         if (e.getStudentUserId() == null) e.setStudentUserId(doc.getString("user_id"));
         if (e.getStudentUserId() == null) {
-            // Last attempt: convert numeric student_id to string
             Object rawId = doc.get("student_user_id");
             if (rawId == null) rawId = doc.get("student_id");
             if (rawId == null) rawId = doc.get("user_id");
             if (rawId instanceof Number) e.setStudentUserId(rawId.toString());
         }
-        
         Object batchObj = doc.get("batch_id");
         if (batchObj instanceof Number) e.setBatchId(((Number) batchObj).intValue());
-        else if (batchObj != null) try { e.setBatchId(Integer.parseInt(batchObj.toString())); } catch (Exception ex) {}
-        
+        else if (batchObj != null) {
+            try { e.setBatchId(Integer.parseInt(batchObj.toString().replaceAll("\\D", ""))); } catch (Exception ex) {}
+        }
         e.setStatus(doc.getString("status"));
         e.setRemarks(doc.getString("remarks"));
         e.setEnrollmentDate(doc.getDate("enrollment_date"));
         if (e.getEnrollmentDate() == null) e.setEnrollmentDate(doc.getDate("date"));
-        
         return e;
     }
 
@@ -815,9 +924,12 @@ public class DocumentMapper {
         
         // ✅ Strictly use user_id (matches users._id)
         p.setUserId(doc.getString("user_id"));
+        if (p.getUserId() == null) p.setUserId(doc.getString("parent_id"));
         if (p.getUserId() == null) p.setUserId(doc.getString("_id"));
         
-        p.setName(doc.getString("name"));
+        String parentName = doc.getString("name");
+        if (parentName == null) parentName = doc.getString("full_name");
+        p.setName(parentName);
         p.setEmail(doc.getString("email"));
         p.setPhone(doc.getString("phone"));
         
@@ -827,12 +939,21 @@ public class DocumentMapper {
         Object incomeObj = doc.get("annual_income");
         if (incomeObj instanceof Number) p.setAnnualIncome(((Number) incomeObj).doubleValue());
         else if (incomeObj != null) try { p.setAnnualIncome(Double.parseDouble(incomeObj.toString())); } catch (Exception ex) {}
+        if (p.getAnnualIncome() == 0) {
+            Object salaryObj = doc.get("salary");
+            if (salaryObj instanceof Number) p.setAnnualIncome(((Number) salaryObj).doubleValue() * 12);
+            else if (salaryObj != null) {
+                try { p.setAnnualIncome(Double.parseDouble(salaryObj.toString()) * 12); } catch (Exception ex) {}
+            }
+        }
         
         Object emergencyObj = doc.get("emergency_contact");
         if (emergencyObj instanceof Number) p.setEmergencyContact(((Number) emergencyObj).longValue());
         else if (emergencyObj != null) try { p.setEmergencyContact(Long.parseLong(emergencyObj.toString())); } catch (Exception ex) {}
         
-        p.setRelationType(doc.getString("relation_type"));
+        String relation = doc.getString("relation_type");
+        if (relation == null) relation = doc.getString("relation");
+        p.setRelationType(relation);
         
         return p;
     }

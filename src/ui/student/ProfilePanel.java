@@ -161,7 +161,7 @@ public class ProfilePanel extends JPanel {
         JPanel card = createSectionCard("Academic Details");
         JPanel grid = new JPanel(new GridLayout(0, 1, 0, 12));
         grid.setOpaque(false);
-        grid.add(createField("Join Date", s.getJoinDate() != null ? new SimpleDateFormat("dd-MM-yyyy").format(s.getJoinDate()) : "-"));
+        grid.add(createField("Join Date", s.getJoinDate() != null ? new SimpleDateFormat("dd-MM-yyyy hh:mm a").format(s.getJoinDate()) : "-"));
         grid.add(createField("Board", s.getBoard()));
         grid.add(createField("Standard", s.getCurrentStd()));
         card.add(grid, BorderLayout.CENTER);

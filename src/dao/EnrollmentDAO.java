@@ -29,12 +29,103 @@ public class EnrollmentDAO {
         try {
             Document doc = DocumentMapper.enrollmentToDocument(enrollment);
             enrollmentCollection.insertOne(doc);
+
+            // ── Notification: ENROLLMENT_CONFIRMED ──────────────────────────
+            new Thread(() -> {
+                try {
+                    com.mongodb.client.MongoDatabase mdb = db.DBConnection.getDatabase();
+                    if (mdb == null) return;
+
+                    // Resolve student
+                    String studentId = enrollment.getStudentUserId();
+                    Document studentDoc = mdb.getCollection("students").find(
+                        com.mongodb.client.model.Filters.or(
+                            com.mongodb.client.model.Filters.eq("_id", studentId),
+                            com.mongodb.client.model.Filters.eq("user_id", studentId)
+                        )
+                    ).first();
+                    String studentName = studentDoc != null ? studentDoc.getString("full_name") : (studentId != null ? studentId : "Unknown");
+                    String parentId    = studentDoc != null ? studentDoc.getString("parent_user_id") : null;
+                    if (parentId == null && studentDoc != null) {
+                        Document pe = (Document) studentDoc.get("parent");
+                        parentId = pe != null ? pe.getString("parent_id") : null;
+                    }
+
+                    // Resolve batch
+                    int batchId = enrollment.getBatchId();
+                    Document batchDoc = mdb.getCollection("batches").find(
+                        com.mongodb.client.model.Filters.eq("_id", batchId)
+                    ).first();
+                    String batchName = batchDoc != null ? batchDoc.getString("batch_name") : "Batch " + batchId;
+                    String teacherId = batchDoc != null ? (batchDoc.getString("teacher_id") != null
+                        ? batchDoc.getString("teacher_id") : String.valueOf(batchDoc.get("teacher_id"))) : null;
+
+                    // Resolve subject
+                    String subjectName = "";
+                    String classStd    = "";
+                    if (batchDoc != null) {
+                        Object subIdObj = batchDoc.get("subject_id");
+                        if (subIdObj != null) {
+                            Document subDoc = mdb.getCollection("subjects").find(
+                                com.mongodb.client.model.Filters.eq("_id", subIdObj)
+                            ).first();
+                            if (subDoc != null) subjectName = subDoc.getString("name") != null
+                                ? subDoc.getString("name") : subDoc.getString("subject_name");
+                        }
+                        classStd = batchDoc.getString("category") != null
+                            ? batchDoc.getString("category") : batchDoc.getString("standard");
+                    }
+
+                    service.NotificationService ns = service.NotificationService.getInstance();
+
+                    // To student
+                    ns.push(new service.NotificationDocument(
+                        service.NotificationService.ROLE_STUDENT, studentId,
+                        service.NotificationService.ENROLLMENT_CONFIRMED,
+                        "Enrollment Confirmed — " + batchName,
+                        String.format("You have been successfully enrolled in '%s' (%s · %s). " +
+                            "Classes begin from the next scheduled session. Welcome aboard!",
+                            batchName, subjectName, classStd))
+                        .studentId(studentId).studentName(studentName)
+                        .batchId(String.valueOf(batchId)).subject(subjectName));
+
+                    // To parent
+                    if (parentId != null) {
+                        ns.push(new service.NotificationDocument(
+                            service.NotificationService.ROLE_PARENT, parentId,
+                            service.NotificationService.ENROLLMENT_CONFIRMED,
+                            "Enrollment Confirmed — " + studentName,
+                            String.format("Your ward %s has been enrolled in '%s' (%s · %s) " +
+                                "at MRK Tuition. Classes begin from the next scheduled session.",
+                                studentName, batchName, subjectName, classStd))
+                            .studentId(studentId).studentName(studentName)
+                            .batchId(String.valueOf(batchId)).subject(subjectName));
+                    }
+
+                    // To teacher
+                    if (teacherId != null) {
+                        ns.push(new service.NotificationDocument(
+                            service.NotificationService.ROLE_TEACHER, teacherId,
+                            service.NotificationService.BATCH_ASSIGNED,
+                            "New Student Enrolled in Your Batch",
+                            String.format("%s has been enrolled in your batch '%s'. " +
+                                "Please update your attendance register.", studentName, batchName))
+                            .studentId(studentId).studentName(studentName)
+                            .batchId(String.valueOf(batchId)).subject(subjectName));
+                    }
+                } catch (Exception ex) {
+                    System.err.println("[EnrollmentDAO] Notification error: " + ex.getMessage());
+                }
+            }).start();
+            // ── End notification ─────────────────────────────────────────────
+
             return true;
         } catch (Exception e) {
             e.printStackTrace();
         }
         return false;
     }
+
 
     public Enrollment getEnrollmentById(int enrollmentId) {
         if (enrollmentCollection == null) return null;
@@ -142,7 +233,7 @@ public class EnrollmentDAO {
         if (enrollmentCollection == null) return ids;
         try (MongoCursor<Document> cursor = enrollmentCollection.find(
                 Filters.and(
-                    Filters.eq("batch_id", batchId),
+                    batchIdFilter(batchId),
                     Filters.regex("status", "^ACTIVE$", "i")
                 )
             ).iterator()) {
@@ -164,7 +255,7 @@ public class EnrollmentDAO {
         if (enrollmentCollection == null) return list;
         try (MongoCursor<Document> cursor = enrollmentCollection.find(
                 Filters.and(
-                    Filters.eq("batch_id", batchId),
+                    batchIdFilter(batchId),
                     Filters.regex("status", "^ACTIVE$", "i")
                 )
             ).iterator()) {
@@ -181,7 +272,7 @@ public class EnrollmentDAO {
     public List<Enrollment> getEnrollmentsByBatchId(int batchId) {
         List<Enrollment> list = new ArrayList<>();
         if (enrollmentCollection == null) return list;
-        try (MongoCursor<Document> cursor = enrollmentCollection.find(Filters.eq("batch_id", batchId)).iterator()) {
+        try (MongoCursor<Document> cursor = enrollmentCollection.find(batchIdFilter(batchId)).iterator()) {
             while (cursor.hasNext()) {
                 Enrollment e = DocumentMapper.documentToEnrollment(cursor.next());
                 if (e != null) list.add(e);
@@ -205,7 +296,7 @@ public class EnrollmentDAO {
                         Filters.eq("student_id", sid),
                         Filters.eq("user_id", sid)
                     ),
-                    Filters.eq("batch_id", batchId),
+                    batchIdFilter(batchId),
                     Filters.regex("status", "^ACTIVE$", "i")
                 )
             ).first();
@@ -309,7 +400,7 @@ public class EnrollmentDAO {
         try {
             return (int) enrollmentCollection.countDocuments(
                 Filters.and(
-                    Filters.eq("batch_id", batchId),
+                    batchIdFilter(batchId),
                     Filters.regex("status", "^ACTIVE$", "i")
                 )
             );
@@ -317,5 +408,13 @@ public class EnrollmentDAO {
             e.printStackTrace();
             return 0;
         }
+    }
+
+    private org.bson.conversions.Bson batchIdFilter(int batchId) {
+        return Filters.or(
+            Filters.eq("batch_id", batchId),
+            Filters.eq("batch_id", String.valueOf(batchId)),
+            Filters.eq("batch_id", String.format("B%03d", batchId))
+        );
     }
 }

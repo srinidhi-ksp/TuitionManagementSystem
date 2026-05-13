@@ -65,7 +65,7 @@ public class StudentManagementFrame extends JPanel {
     private JTable studentTable;
     private DefaultTableModel model;
     private List<Student> currentStudents;
-    private static final SimpleDateFormat DATE_FMT = new SimpleDateFormat("dd-MM-yyyy");
+    private static final SimpleDateFormat DATE_FMT = new SimpleDateFormat("dd-MM-yyyy hh:mm a");
 
     // ── Filter components ──
     private JComboBox<String> standardCombo, boardCombo, cityCombo, statusCombo;
@@ -605,6 +605,7 @@ public class StudentManagementFrame extends JPanel {
                 Parent p = new Parent();
                 p.setUserId(pId); p.setName(pNameField.getText().trim());
                 p.setEmail("p_" + emailField.getText().trim()); p.setPassword("pass123");
+                p.setPhone(emgField.getText().trim());
                 p.setRelationType(relCombo.getSelectedItem().toString());
                 p.setPreferredLanguage(langField.getText().trim()); p.setOccupation(occField.getText().trim());
                 p.setAnnualIncome(incField.getText().trim().isEmpty() ? 0 : Double.parseDouble(incField.getText().trim()));

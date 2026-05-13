@@ -74,6 +74,9 @@ public class ParentFeesPanel extends JPanel {
 
     private static final Color CARD_BG = Color.WHITE;
     private JComboBox<String> studentSelector;
+    private JComboBox<String> monthSelector;
+    private JComboBox<String> yearSelector;
+    private JLabel lastPayLbl;
     private List<Student> linkedStudents;
     private Student currentStudent;
     
@@ -118,8 +121,32 @@ public class ParentFeesPanel extends JPanel {
         studentSelector.setPreferredSize(new Dimension(220, 38));
         studentSelector.addActionListener(e -> onStudentSelected());
 
+        
+        JPanel filterPanel = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 10, 0));
+        filterPanel.setBackground(ThemeManager.BG);
+        
+        String[] months = {"All Months", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+        monthSelector = new JComboBox<>(months);
+        monthSelector.setPreferredSize(new Dimension(100, 38));
+        monthSelector.addActionListener(e -> onStudentSelected());
+
+        String[] years = {"All Years", "2024", "2025", "2026", "2027"};
+        yearSelector = new JComboBox<>(years);
+        yearSelector.setPreferredSize(new Dimension(100, 38));
+        yearSelector.addActionListener(e -> onStudentSelected());
+
+        JButton refreshBtn = new JButton("Refresh");
+        refreshBtn.setPreferredSize(new Dimension(100, 38));
+        refreshBtn.addActionListener(e -> onStudentSelected());
+
+        filterPanel.add(monthSelector);
+        filterPanel.add(yearSelector);
+        filterPanel.add(refreshBtn);
+        filterPanel.add(studentSelector);
+
         header.add(titles, BorderLayout.WEST);
-        header.add(studentSelector, BorderLayout.EAST);
+        header.add(filterPanel, BorderLayout.EAST);
+
         add(header, BorderLayout.NORTH);
     }
 
@@ -130,17 +157,21 @@ public class ParentFeesPanel extends JPanel {
         scrollContent.setBorder(new EmptyBorder(10, 10, 10, 10));
 
         // Summary Card
-        JPanel summaryCard = new JPanel(new GridLayout(1, 3, 20, 0));
+        
+        JPanel summaryCard = new JPanel(new GridLayout(1, 4, 20, 0));
         summaryCard.setBackground(ThemeManager.BG);
         summaryCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, 120));
         
         totalLbl = new JLabel("₹0");
         paidLbl = new JLabel("₹0");
         pendingLbl = new JLabel("₹0");
+        lastPayLbl = new JLabel("—");
 
         summaryCard.add(createSummaryMiniCard("TOTAL FEES", totalLbl, new Color(59, 130, 246)));
         summaryCard.add(createSummaryMiniCard("PAID AMOUNT", paidLbl, new Color(34, 197, 94)));
         summaryCard.add(createSummaryMiniCard("PENDING", pendingLbl, new Color(239, 68, 68)));
+        summaryCard.add(createSummaryMiniCard("LAST PAYMENT", lastPayLbl, new Color(168, 85, 247)));
+
 
         scrollContent.add(summaryCard);
         scrollContent.add(Box.createRigidArea(new Dimension(0, 30)));
@@ -618,153 +649,59 @@ public class ParentFeesPanel extends JPanel {
             paidLbl.setText(String.format("₹%.0f", summary.get("paidAmount")));
             pendingLbl.setText(String.format("₹%.0f", summary.get("pendingAmount")));
             
-            loadPaymentHistory(currentStudent.getUserId());
+            loadPaymentHistory(currentStudent.getUserId(), monthSelector.getSelectedIndex(), yearSelector.getSelectedItem().toString());
         }
     }
 
-    private void loadPaymentHistory(String studentId) {
+    private void loadPaymentHistory(String studentId, int selectedMonth, String selectedYearStr) {
         historyModel.setRowCount(0);
         if (studentId == null || studentId.isEmpty()) return;
 
         new SwingWorker<Void, Object[]>() {
+            double totalPaid = 0;
+            Date lastPaymentDate = null;
+
             @Override
             protected Void doInBackground() throws Exception {
                 try {
-                    MongoDatabase db = DBConnection.getDatabase();
-                    if (db == null) return null;
+                    List<Map<String, Object>> history = feeService.getPaymentHistory(studentId);
+                    SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy hh:mm a");
+                    
+                    for (Map<String, Object> pay : history) {
+                        String dateStr = (String) pay.get("date");
+                        Date date = null;
+                        if (!"-".equals(dateStr)) {
+                            date = sdf.parse(dateStr);
+                        }
+                        
+                        if (date != null) {
+                            Calendar cal = Calendar.getInstance();
+                            cal.setTime(date);
+                            int payMonth = cal.get(Calendar.MONTH) + 1;
+                            int payYear = cal.get(Calendar.YEAR);
 
-                    SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
-
-                    MongoCollection<Document> paymentsCol =
-                        db.getCollection("payments");
-                    MongoCollection<Document> enrollmentsCol =
-                        db.getCollection("enrollments");
-                    MongoCollection<Document> batchesCol =
-                        db.getCollection("batches");
-                    MongoCollection<Document> subjectsCol =
-                        db.getCollection("subjects");
-
-                    // ────────────────────────────────────────────────────────
-                    // FORMAT 1: enrollment-based payments
-                    // These have "enrollment_id" field and NO "student_id"
-                    // ────────────────────────────────────────────────────────
-                    FindIterable<Document> enrollments = enrollmentsCol.find(
-                        new Document("student_id", studentId)
-                    );
-
-                    for (Document enrollment : enrollments) {
-                        Object enrId = enrollment.get("_id");
-                        if (enrId == null) continue;
-
-                        // Strictly only Format-1: has enrollment_id, 
-                        // no student_id field
-                        FindIterable<Document> fmt1Docs = paymentsCol.find(
-                            Filters.and(
-                                Filters.eq("enrollment_id", enrId),
-                                Filters.exists("student_id", false)
-                            )
-                        ).sort(new Document("payment_date", -1));
-
-                        for (Document pay : fmt1Docs) {
-                            // Parse amount safely
-                            double amount = parseAmount(pay.get("amount"));
+                            if (selectedMonth > 0 && payMonth != selectedMonth) continue;
+                            if (!"All Years".equals(selectedYearStr) && payYear != Integer.parseInt(selectedYearStr)) continue;
                             
-                            // Skip invalid records with zero amount
-                            if (amount <= 0) continue;
-
-                            // Resolve batch name
-                            String batchLabel = "Unknown Batch";
-                            Object batchIdObj = enrollment.get("batch_id");
-                            if (batchIdObj != null) {
-                                Document batch = batchesCol.find(
-                                    new Document("_id", batchIdObj)
-                                ).first();
-                                if (batch != null)
-                                    batchLabel = batch.getString("batch_name");
+                            if (lastPaymentDate == null || date.after(lastPaymentDate)) {
+                                lastPaymentDate = date;
                             }
-
-                            String mode   = pay.getString("mode");
-                            String status = pay.getString("status");
-                            Date   date   = pay.getDate("payment_date");
-
-                            // Skip if no valid date
-                            if (date == null) continue;
-
-                            publish(new Object[]{
-                                sdf.format(date),
-                                batchLabel,
-                                String.format("₹%.0f", amount),
-                                mode   != null ? mode.toUpperCase()   : "—",
-                                status != null ? status.toUpperCase() : "—"
-                            });
                         }
-                    }
-
-                    // ────────────────────────────────────────────────────────
-                    // FORMAT 2: direct student_id payments
-                    // These have "student_id" field and NO "enrollment_id"
-                    // ────────────────────────────────────────────────────────
-                    FindIterable<Document> fmt2Docs = paymentsCol.find(
-                        Filters.and(
-                            Filters.eq("student_id", studentId),
-                            Filters.exists("enrollment_id", false)
-                        )
-                    ).sort(new Document("payment_date", -1));
-
-                    for (Document pay : fmt2Docs) {
-                        // Parse amount from "amount_paid" field
-                        double amount = parseAmount(pay.get("amount_paid"));
-
-                        // Skip invalid/incomplete records with zero amount
-                        if (amount <= 0) continue;
-
-                        // Resolve subject name
-                        // subject_id is stored as String "5" but subjects._id
-                        // is integer 5 — must parse before querying
-                        String subjectIdStr = pay.getString("subject_id");
-                        if (subjectIdStr == null || subjectIdStr.trim().isEmpty()) {
-                            // No subject — this is an incomplete record, skip
-                            continue;
-                        }
-
-                        String subjectLabel;
-                        try {
-                            int subjectIdInt = Integer.parseInt(
-                                subjectIdStr.trim());
-                            Document subject = subjectsCol.find(
-                                new Document("_id", subjectIdInt)
-                            ).first();
-                            subjectLabel = (subject != null)
-                                ? subject.getString("subject_name")
-                                : "Subject " + subjectIdStr;
-                        } catch (NumberFormatException ex) {
-                            subjectLabel = "Subject " + subjectIdStr;
-                        }
-
-                        // Build display label with month
-                        int month = pay.getInteger("month", 0);
-                        String monthLabel = (month >= 1 && month <= 12)
-                            ? new SimpleDateFormat("MMM yyyy").format(
-                                new GregorianCalendar(2026, month - 1, 1)
-                                    .getTime())
-                            : "";
-                        String batchLabel = subjectLabel
-                            + (monthLabel.isEmpty() ? "" : " — " + monthLabel);
-
-                        // Use payment_date; fallback to created_at only if
-                        // payment_date is null — never show created_at as date
-                        Date date = pay.getDate("payment_date");
-                        if (date == null) date = pay.getDate("created_at");
-                        if (date == null) continue; // skip undated records
-
-                        String mode = pay.getString("payment_mode");
-
+                        
+                        double amount = 0;
+                        Object amtObj = pay.get("amount");
+                        if (amtObj instanceof Double) amount = (Double) amtObj;
+                        else if (amtObj instanceof Number) amount = ((Number) amtObj).doubleValue();
+                        
+                        totalPaid += amount;
+                        
                         publish(new Object[]{
-                            sdf.format(date),
-                            batchLabel,
+                            dateStr,
+                            pay.get("batch"),
                             String.format("₹%.0f", amount),
-                            mode != null ? mode.toUpperCase() : "—",
-                            "PAID"
+                            pay.get("method"),
+                            pay.get("status"),
+                            null
                         });
                     }
 
@@ -783,8 +720,17 @@ public class ParentFeesPanel extends JPanel {
             protected void done() {
                 if (historyModel.getRowCount() == 0) {
                     historyModel.addRow(new Object[]{
-                        "—", "No payment records found", "—", "—", "—"
+                        "—", "No payment records found", "—", "—", "—", "—"
                     });
+                }
+
+                paidLbl.setText(String.format("₹%.0f", totalPaid));
+                
+                if (lastPaymentDate != null) {
+                    SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy hh:mm a");
+                    lastPayLbl.setText(sdf.format(lastPaymentDate));
+                } else {
+                    lastPayLbl.setText("—");
                 }
             }
         }.execute();

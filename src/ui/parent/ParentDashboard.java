@@ -124,7 +124,7 @@ public class ParentDashboard extends JFrame {
                         String batchName = batch != null ? 
                                            batch.getString("batch_name") : "your batch";
                         
-                        new service.NotificationService().notifyFeeOverdue(
+                        service.NotificationService.getInstance().notifyFeeOverdue(
                             parentId, studentId, studentName, batchName, amount
                         );
                     }

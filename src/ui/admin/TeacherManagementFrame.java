@@ -62,7 +62,7 @@ public class TeacherManagementFrame extends JPanel {
     private JTable teacherTable;
     private DefaultTableModel model;
     private List<Teacher> currentTeachers;
-    private static final SimpleDateFormat DATE_FMT = new SimpleDateFormat("dd-MMM-yyyy");
+    private static final SimpleDateFormat DATE_FMT = new SimpleDateFormat("dd-MM-yyyy hh:mm a");
 
     // ── Filter components ──
     private JComboBox<String> specializationCombo, experienceCombo, cityCombo, salaryCombo;

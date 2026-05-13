@@ -133,20 +133,11 @@ public class ScheduleConflictValidator {
      * @return ConflictInfo object with conflict details, or null if no conflict
      */
     public static ConflictInfo checkStudentConflict(String studentId, int selectedBatchId) {
-        if (studentId == null) {
-            return null;
-        }
+        if (studentId == null) return null;
 
-        // Get the selected batch details
         BatchDAO batchDao = new BatchDAO();
         Batch selectedBatch = batchDao.getBatchById(selectedBatchId);
-        if (selectedBatch == null) {
-            return null;
-        }
-
-        String newDay = extractDayFromTiming(selectedBatch.getTiming());
-        String newStartTime = extractStartTimeFromTiming(selectedBatch.getTiming());
-        String newEndTime = extractEndTimeFromTiming(selectedBatch.getTiming());
+        if (selectedBatch == null || selectedBatch.getScheduleEntries() == null) return null;
 
         // Get student's active enrollments
         EnrollmentDAO enrollmentDao = new EnrollmentDAO();
@@ -154,35 +145,29 @@ public class ScheduleConflictValidator {
 
         for (Enrollment enrollment : activeEnrollments) {
             // Don't check the same batch
-            if (enrollment.getBatchId() == selectedBatchId) {
-                continue;
-            }
+            if (enrollment.getBatchId() == selectedBatchId) continue;
 
-            // Get existing batch details
             Batch existingBatch = batchDao.getBatchById(enrollment.getBatchId());
-            if (existingBatch == null) {
-                continue;
-            }
+            if (existingBatch == null || existingBatch.getScheduleEntries() == null) continue;
 
-            String existingDay = extractDayFromTiming(existingBatch.getTiming());
-            String existingStartTime = extractStartTimeFromTiming(existingBatch.getTiming());
-            String existingEndTime = extractEndTimeFromTiming(existingBatch.getTiming());
-
-            // Check for day match
-            if (existingDay != null && existingDay.equalsIgnoreCase(newDay)) {
-                // Check for time overlap
-                if (isTimeConflict(newStartTime, newEndTime, existingStartTime, existingEndTime)) {
-                    return new ConflictInfo(
-                        existingBatch.getBatchName(),
-                        existingDay,
-                        existingStartTime,
-                        existingEndTime,
-                        existingBatch.getBatchId()
-                    );
+            // Check for overlap in schedule entries (Day + Timeslot)
+            for (model.ScheduleEntry newEntry : selectedBatch.getScheduleEntries()) {
+                for (model.ScheduleEntry oldEntry : existingBatch.getScheduleEntries()) {
+                    if (newEntry.getDay().equalsIgnoreCase(oldEntry.getDay()) && 
+                        newEntry.getTimeslotId().equals(oldEntry.getTimeslotId())) {
+                        
+                        return new ConflictInfo(
+                            existingBatch.getBatchName(),
+                            oldEntry.getDay(),
+                            "Timeslot: " + oldEntry.getTimeslotId(),
+                            "",
+                            existingBatch.getBatchId()
+                        );
+                    }
                 }
             }
         }
-        return null; // No conflict
+        return null;
     }
 
     // ─────────────────────────────────────────────────────────────

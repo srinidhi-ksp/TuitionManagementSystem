@@ -44,7 +44,7 @@ public class StudentMarksPanel extends JPanel {
     private JPanel graphPanel;
     private List<TestMark> marks;
 
-    private static final SimpleDateFormat DATE_FMT = new SimpleDateFormat("dd MMM yyyy");
+    private static final SimpleDateFormat DATE_FMT = new SimpleDateFormat("dd-MM-yyyy hh:mm a");
 
     public StudentMarksPanel() {
         setLayout(new BorderLayout());

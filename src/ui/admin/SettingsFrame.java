@@ -216,7 +216,7 @@ public class SettingsFrame extends JPanel {
             {"OS",            System.getProperty("os.name") + " " + System.getProperty("os.arch")},
             {"Database",      "MongoDB (Local)"},
             {"DB Name",       "tuitionManagementSystem"},
-            {"Last Login",    LocalDate.now().format(DateTimeFormatter.ofPattern("dd MMM yyyy"))},
+            {"Last Login",    java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy hh:mm a"))},
         };
         for (String[] row : sysInfo) {
             card.add(infoRow(row[0], row[1]));

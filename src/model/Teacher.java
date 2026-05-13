@@ -8,6 +8,7 @@ public class Teacher extends User {
     private String specialization;
     private String joinDate;
     private String adminId;
+    private String authUserId; // users._id link (Uxx)
 
     private int doorNo;
     private String street;
@@ -71,6 +72,9 @@ public class Teacher extends User {
 
     public String getAdminId() { return adminId; }
     public void setAdminId(String adminId) { this.adminId = adminId; }
+
+    public String getAuthUserId() { return authUserId; }
+    public void setAuthUserId(String authUserId) { this.authUserId = authUserId; }
 
     public int getDoorNo() { return doorNo; }
     public void setDoorNo(int doorNo) { this.doorNo = doorNo; }

@@ -24,10 +24,14 @@ public class TeacherDashboard extends JFrame {
     
     private JButton activeBtn = null;
     private model.User user;
+    private JLabel bellBadge;
+    private javax.swing.Timer notifPoller;
     
     public TeacherDashboard(model.User user) {
         // Load full teacher profile to ensure correct teacher_id (T001) is used instead of login ID
-        model.Teacher t = new dao.TeacherDAO().getTeacherById(user.getUserId());
+        model.Teacher t = user instanceof model.Teacher
+            ? (model.Teacher) user
+            : new dao.TeacherDAO().getByUserId(user.getUserId());
         this.user = (t != null) ? t : user;
         
         setTitle("MRK Tuition - Teacher Workspace");
@@ -43,18 +47,22 @@ public class TeacherDashboard extends JFrame {
 
         // Sub-panels initialized passing the teacher object token where required
         mainContentPanel.add(new OverviewPanel(), "Dashboard");
-        mainContentPanel.add(new MyBatchesPanel(user), "My Batches");
+        mainContentPanel.add(new MyBatchesPanel(this.user), "My Batches");
         mainContentPanel.add(new AttendanceModulePanel(), "Take Attendance");
-        mainContentPanel.add(new TestsMarksPanel(user), "Tests & Marks");
-        mainContentPanel.add(new SyllabusUpdatePanel(user), "Syllabus Progress");
-        mainContentPanel.add(new StudentsListPanel(user), "My Students");
+        mainContentPanel.add(new TestsMarksPanel(this.user), "Tests & Marks");
+        mainContentPanel.add(new SyllabusUpdatePanel(this.user), "Syllabus Progress");
+        mainContentPanel.add(new StudentsListPanel(this.user), "My Students");
         mainContentPanel.add(new TeacherTimetablePanel(), "Timetable");
-        mainContentPanel.add(new TeacherSalaryPanel(user), "My Salary");
-        mainContentPanel.add(new ProfilePanel(user), "Profile");
+        mainContentPanel.add(new TeacherSalaryPanel(this.user), "My Salary");
+        mainContentPanel.add(new ProfilePanel(this.user), "Profile");
 
         add(createTopNavbar(), BorderLayout.NORTH);
         add(createSidebar(), BorderLayout.WEST);
         add(mainContentPanel, BorderLayout.CENTER);
+
+        // Start notification poller
+        final String teacherUserId = this.user.getUserId();
+        SwingUtilities.invokeLater(() -> startNotificationPoller("TEACHER", teacherUserId));
     }
 
     private JPanel createTopNavbar() {
@@ -121,12 +129,69 @@ public class TeacherDashboard extends JFrame {
         
         profileBtn.addActionListener(e -> popupMenu.show(profileBtn, 0, profileBtn.getHeight()));
 
+        // Bell button + red badge overlay
+        JPanel bellPanel = new JPanel(null);
+        bellPanel.setOpaque(false);
+        bellPanel.setPreferredSize(new Dimension(50, 48));
+
+        JButton bellBtn = new JButton("🔔");
+        bellBtn.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 16));
+        bellBtn.setForeground(Color.WHITE);
+        bellBtn.setContentAreaFilled(false);
+        bellBtn.setBorderPainted(false);
+        bellBtn.setFocusPainted(false);
+        bellBtn.setOpaque(false);
+        bellBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        bellBtn.setToolTipText("Notifications");
+        bellBtn.setBounds(0, 10, 34, 28);
+
+        bellBadge = new JLabel("0");
+        bellBadge.setFont(new Font("SansSerif", Font.BOLD, 9));
+        bellBadge.setForeground(Color.WHITE);
+        bellBadge.setOpaque(true);
+        bellBadge.setBackground(new Color(220, 53, 69));
+        bellBadge.setHorizontalAlignment(SwingConstants.CENTER);
+        bellBadge.setBorder(BorderFactory.createEmptyBorder(1, 4, 1, 4));
+        bellBadge.setBounds(20, 6, 26, 14);
+        bellBadge.setVisible(false);
+
+        bellPanel.add(bellBtn);
+        bellPanel.add(bellBadge);
+
+        final String tid = this.user.getUserId();
+        final JLabel bRef = bellBadge;
+        bellBtn.addActionListener(e -> ui.common.NotificationInboxPanel.showInbox(
+            (java.awt.Window) this, "TEACHER", tid, bRef));
+
+        userPanel.add(bellPanel);
         userPanel.add(profileBtn);
 
         topPanel.add(logoPanel, BorderLayout.WEST);
         topPanel.add(userPanel, BorderLayout.EAST);
 
         return topPanel;
+    }
+
+    private void startNotificationPoller(String recipientType, String recipientId) {
+        notifPoller = new javax.swing.Timer(30_000, e -> {
+            long unread = service.NotificationService.getInstance()
+                .getUnreadCount(recipientType, recipientId);
+            if (bellBadge != null) {
+                if (unread > 0) {
+                    bellBadge.setText(unread > 99 ? "99+" : String.valueOf(unread));
+                    bellBadge.setVisible(true);
+                } else {
+                    bellBadge.setVisible(false);
+                }
+            }
+        });
+        notifPoller.setInitialDelay(0);
+        notifPoller.start();
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override public void windowClosed(java.awt.event.WindowEvent e) {
+                if (notifPoller != null) notifPoller.stop();
+            }
+        });
     }
 
     private JScrollPane createSidebar() {

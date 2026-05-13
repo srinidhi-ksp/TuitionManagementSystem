@@ -39,7 +39,13 @@ public class SubjectDAO {
     public Subject getSubjectById(int subjectId) {
         if (subjectCollection == null) return null;
         try {
-            Document doc = subjectCollection.find(Filters.eq("_id", subjectId)).first();
+            Document doc = subjectCollection.find(Filters.or(
+                Filters.eq("_id", subjectId),
+                Filters.eq("_id", String.valueOf(subjectId)),
+                Filters.eq("_id", String.format("SUB%02d", subjectId)),
+                Filters.eq("_id", String.format("SUB%03d", subjectId)),
+                Filters.eq("_id", "SUB" + subjectId)
+            )).first();
             return DocumentMapper.documentToSubject(doc);
         } catch (Exception e) {
             e.printStackTrace();

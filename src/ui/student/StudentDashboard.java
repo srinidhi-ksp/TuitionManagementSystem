@@ -15,8 +15,12 @@ public class StudentDashboard extends JFrame {
     private Color brandColor = new Color(50, 150, 250); // Student Blue
     private Color sidebarBg = Color.WHITE;
     private Color bgLight = new Color(245, 247, 250);
+    private JLabel bellBadge;
+    private javax.swing.Timer notifPoller;
+    private model.User currentUser;
     
     public StudentDashboard(model.User user) {
+        this.currentUser = user;
         
         setTitle("MRK Tuition - Student Portal");
         setSize(1300, 800);
@@ -43,9 +47,13 @@ public class StudentDashboard extends JFrame {
         add(createTopNavbar(), BorderLayout.NORTH);
         add(createSidebar(), BorderLayout.WEST);
         add(mainContentPanel, BorderLayout.CENTER);
-        
+
         // Apply current theme
         util.ThemeUtil.apply(this);
+
+        // Start notification poller
+        final String studentUserId = user.getUserId();
+        SwingUtilities.invokeLater(() -> startNotificationPoller("STUDENT", studentUserId));
     }
 
     private JPanel createTopNavbar() {
@@ -129,12 +137,70 @@ public class StudentDashboard extends JFrame {
         popupMenu.addSeparator();
         popupMenu.add(logoutItem);
         profileBtn.addActionListener(e -> popupMenu.show(profileBtn, 0, profileBtn.getHeight()));
-        
+
+        // Bell button + red badge overlay
+        JPanel bellPanel = new JPanel(null);
+        bellPanel.setOpaque(false);
+        bellPanel.setBackground(Color.WHITE);
+        bellPanel.setPreferredSize(new Dimension(50, 48));
+
+        JButton bellBtn = new JButton("🔔");
+        bellBtn.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 16));
+        bellBtn.setForeground(new Color(50, 50, 50));
+        bellBtn.setContentAreaFilled(false);
+        bellBtn.setBorderPainted(false);
+        bellBtn.setFocusPainted(false);
+        bellBtn.setOpaque(false);
+        bellBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        bellBtn.setToolTipText("Notifications");
+        bellBtn.setBounds(0, 8, 34, 30);
+
+        bellBadge = new JLabel("0");
+        bellBadge.setFont(new Font("SansSerif", Font.BOLD, 9));
+        bellBadge.setForeground(Color.WHITE);
+        bellBadge.setOpaque(true);
+        bellBadge.setBackground(new Color(220, 53, 69));
+        bellBadge.setHorizontalAlignment(SwingConstants.CENTER);
+        bellBadge.setBorder(BorderFactory.createEmptyBorder(1, 4, 1, 4));
+        bellBadge.setBounds(20, 4, 26, 14);
+        bellBadge.setVisible(false);
+
+        bellPanel.add(bellBtn);
+        bellPanel.add(bellBadge);
+
+        final String sid = currentUser != null ? currentUser.getUserId() : "";
+        final JLabel bRef = bellBadge;
+        bellBtn.addActionListener(e -> ui.common.NotificationInboxPanel.showInbox(
+            (java.awt.Window) this, "STUDENT", sid, bRef));
+
+        userPanel.add(bellPanel);
         userPanel.add(profileBtn);
 
         topPanel.add(logoPanel, BorderLayout.WEST);
         topPanel.add(userPanel, BorderLayout.EAST);
         return topPanel;
+    }
+
+    private void startNotificationPoller(String recipientType, String recipientId) {
+        notifPoller = new javax.swing.Timer(30_000, e -> {
+            long unread = service.NotificationService.getInstance()
+                .getUnreadCount(recipientType, recipientId);
+            if (bellBadge != null) {
+                if (unread > 0) {
+                    bellBadge.setText(unread > 99 ? "99+" : String.valueOf(unread));
+                    bellBadge.setVisible(true);
+                } else {
+                    bellBadge.setVisible(false);
+                }
+            }
+        });
+        notifPoller.setInitialDelay(0);
+        notifPoller.start();
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override public void windowClosed(java.awt.event.WindowEvent e) {
+                if (notifPoller != null) notifPoller.stop();
+            }
+        });
     }
 
     private static final Color NAV_BG      = new Color(10, 27, 63);

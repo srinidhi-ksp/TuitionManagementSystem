@@ -274,6 +274,40 @@ public class FeeService {
             }
 
             boolean success = paymentDAO.insertPayment(payment);
+            if (success) {
+                try {
+                    com.mongodb.client.MongoDatabase database = db.DBConnection.getDatabase();
+                    if (database != null) {
+                        model.Student s = studentDAO.getStudentById(studentId);
+                        if (s == null) s = studentDAO.getStudentByUserId(studentId);
+                        if (s != null) {
+                            String parentId = s.getParentUserId();
+                            if (parentId == null) {
+                                org.bson.Document sDoc = database.getCollection("students").find(com.mongodb.client.model.Filters.eq("_id", studentId)).first();
+                                if (sDoc != null) {
+                                    org.bson.Document parentEmbed = (org.bson.Document) sDoc.get("parent");
+                                    if (parentEmbed != null) parentId = parentEmbed.getString("parent_id");
+                                }
+                            }
+                            if (parentId != null) {
+                                String amountFormatted = String.format("Rs.%.0f", pendingToPay);
+                                String modeDisplay = "CASH".equalsIgnoreCase(paymentMode) ? "CASH" : paymentMode;
+                                String notifMsg = "Payment of " + amountFormatted + " received for " + s.getName() + " (" + subject.getSubjectName() + " - " + batch.getBatchName() + ") via " + modeDisplay + ".";
+                                org.bson.Document notif = new org.bson.Document()
+                                    .append("parent_id", parentId)
+                                    .append("title", "Payment Successful")
+                                    .append("message", notifMsg)
+                                    .append("date", new java.util.Date())
+                                    .append("is_read", false);
+                                database.getCollection("notifications").insertOne(notif);
+                            }
+                        }
+                    }
+                } catch (Exception ex) {
+                    System.err.println("[FeeService] Failed to generate notification: " + ex.getMessage());
+                }
+            }
+
 
             if (success) {
                 System.out.println("[FeeService] ✅ Payment recorded for student=" + studentId + " batch=" + batchId);
@@ -397,7 +431,7 @@ public class FeeService {
                 
                 String dateStr = "-";
                 if (p.getPaymentDate() != null) {
-                    dateStr = new java.text.SimpleDateFormat("dd-MM-yyyy").format(p.getPaymentDate());
+                    dateStr = new java.text.SimpleDateFormat("dd-MM-yyyy hh:mm a").format(p.getPaymentDate());
                 }
                 row.put("date", dateStr);
                 

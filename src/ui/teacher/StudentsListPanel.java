@@ -129,7 +129,7 @@ public class StudentsListPanel extends JPanel {
                         model.addRow(new Object[]{"No active students", "-", "-", "-"});
                         return;
                     }
-                    SimpleDateFormat fmt = new SimpleDateFormat("dd MMM yyyy");
+                    SimpleDateFormat fmt = new SimpleDateFormat("dd-MM-yyyy hh:mm a");
                     for (TeacherPortalService.StudentRow row : rows) {
                         model.addRow(new Object[]{
                             row.student.getUserId(),

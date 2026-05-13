@@ -63,9 +63,9 @@ public class SubjectManagementFrame extends JPanel {
         card.setBackground(CARD_BG);
         card.setBorder(BorderFactory.createLineBorder(new Color(225, 230, 240), 1, true));
 
-        String[] cols = {"Subject Name", "Category", "Syllabus Version", "Monthly Fee", "Status", "Actions"};
+        String[] cols = {"Subject Name", "Syllabus Version", "Monthly Fee", "Status", "Actions"};
         model = new DefaultTableModel(cols, 0) {
-            @Override public boolean isCellEditable(int r, int c) { return c == 5; }
+            @Override public boolean isCellEditable(int r, int c) { return c == 4; }
         };
         subjectTable = new JTable(model);
         styleTable(subjectTable);
@@ -87,8 +87,8 @@ public class SubjectManagementFrame extends JPanel {
                 }
             }
         };
-        subjectTable.getColumnModel().getColumn(5).setCellRenderer(new TableActionCellRender());
-        subjectTable.getColumnModel().getColumn(5).setCellEditor(new TableActionCellEditor(ev));
+        subjectTable.getColumnModel().getColumn(4).setCellRenderer(new TableActionCellRender());
+        subjectTable.getColumnModel().getColumn(4).setCellEditor(new TableActionCellEditor(ev));
 
         JScrollPane scroll = new JScrollPane(subjectTable);
         scroll.setBorder(BorderFactory.createEmptyBorder());
@@ -105,10 +105,18 @@ public class SubjectManagementFrame extends JPanel {
         currentSubjects = new SubjectDAO().getAllSubjects();
         for (Subject s : currentSubjects) {
             model.addRow(new Object[]{
-                s.getSubjectName(), s.getCategory(), s.getSyllabusVersion(),
-                "Rs. " + s.getMonthlyFee(), s.getStatus(), ""
+                safe(s.getSubjectName()), safe(s.getSyllabusVersion()),
+                formatCurrency(s.getMonthlyFee()), safe(s.getStatus()), ""
             });
         }
+    }
+
+    private String safe(String value) {
+        return value == null || value.trim().isEmpty() || value.equalsIgnoreCase("null") ? "Not Available" : value;
+    }
+
+    private String formatCurrency(double value) {
+        return value > 0 ? "₹" + String.format("%,.0f", value) : "Not Available";
     }
 
     private void openSubjectModal(Subject editTarget) {
@@ -127,7 +135,6 @@ public class SubjectManagementFrame extends JPanel {
         form.setBackground(CARD_BG);
 
         JTextField nameField = styledField();
-        JComboBox<String> categoryCombo = new JComboBox<>(new String[]{"Science", "Mathematics", "Commerce", "Languages", "Arts"});
         JTextField versionField = styledField("v1.0");
         JTextField feeField = styledField();
         JComboBox<String> statusCombo = new JComboBox<>(new String[]{"Active", "Inactive"});
@@ -139,7 +146,6 @@ public class SubjectManagementFrame extends JPanel {
 
         if (isEditMode) {
             nameField.setText(editTarget.getSubjectName());
-            categoryCombo.setSelectedItem(editTarget.getCategory());
             versionField.setText(editTarget.getSyllabusVersion());
             feeField.setText(String.valueOf(editTarget.getMonthlyFee()));
             statusCombo.setSelectedItem(editTarget.getStatus());
@@ -147,7 +153,6 @@ public class SubjectManagementFrame extends JPanel {
         }
 
         form.add(formRow("Subject Name", nameField));
-        form.add(formRow("Category", categoryCombo));
         form.add(formRow("Syllabus Version", versionField));
         form.add(formRow("Monthly Fee", feeField));
         form.add(formRow("Status", statusCombo));
@@ -162,7 +167,6 @@ public class SubjectManagementFrame extends JPanel {
                 Subject s = isEditMode ? editTarget : new Subject();
                 if (!isEditMode) s.setSubjectId((int)(System.currentTimeMillis() % 100000));
                 s.setSubjectName(nameField.getText().trim());
-                s.setCategory(categoryCombo.getSelectedItem().toString());
                 s.setSyllabusVersion(versionField.getText().trim());
                 s.setMonthlyFee(Double.parseDouble(feeField.getText().trim()));
                 s.setStatus(statusCombo.getSelectedItem().toString());

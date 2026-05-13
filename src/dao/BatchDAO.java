@@ -8,6 +8,7 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.IndexOptions;
 import com.mongodb.client.model.Sorts;
 
 import model.Batch;
@@ -23,6 +24,21 @@ public class BatchDAO {
         MongoDatabase database = DBConnection.getDatabase();
         if (database != null) {
             batchCollection = database.getCollection("batches");
+            ensureIndexes();
+        }
+    }
+
+    /** Create the compound index for teacher-conflict detection. */
+    private void ensureIndexes() {
+        try {
+            batchCollection.createIndex(
+                new Document("teacher_id", 1)
+                    .append("schedule.day", 1)
+                    .append("schedule.timeslotId", 1),
+                new IndexOptions().name("idx_teacher_day_slot").background(true)
+            );
+        } catch (Exception e) {
+            // Index may already exist — safe to ignore
         }
     }
 
@@ -41,7 +57,7 @@ public class BatchDAO {
     public Batch getBatchById(int batchId) {
         if (batchCollection == null) return null;
         try {
-            Document doc = batchCollection.find(Filters.eq("_id", batchId)).first();
+            Document doc = batchCollection.find(batchIdFilter(batchId)).first();
             return DocumentMapper.documentToBatch(doc);
         } catch (Exception e) {
             e.printStackTrace();
@@ -53,7 +69,8 @@ public class BatchDAO {
         List<Batch> list = new ArrayList<>();
         if (batchCollection == null) return list;
 
-        try (MongoCursor<Document> cursor = batchCollection.find().sort(Sorts.ascending("standard", "batch_name")).iterator()) {
+        try (MongoCursor<Document> cursor = batchCollection.find()
+                .sort(Sorts.ascending("standard", "batch_name")).iterator()) {
             while (cursor.hasNext()) {
                 Document doc = cursor.next();
                 Batch b = DocumentMapper.documentToBatch(doc);
@@ -67,11 +84,36 @@ public class BatchDAO {
         return list;
     }
 
+    /** Return only batches where status = ACTIVE. */
+    public List<Batch> findAllActive() {
+        List<Batch> list = new ArrayList<>();
+        if (batchCollection == null) return list;
+
+        try (MongoCursor<Document> cursor = batchCollection.find(
+                Filters.or(
+                    Filters.eq("status", "ACTIVE"),
+                    Filters.not(Filters.exists("status"))  // treat missing status as active
+                )
+        ).sort(Sorts.ascending("standard", "batch_name")).iterator()) {
+            while (cursor.hasNext()) {
+                Batch b = DocumentMapper.documentToBatch(cursor.next());
+                if (b != null) list.add(b);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
     public List<Batch> getBatchesByTeacherId(String teacherId) {
         List<Batch> list = new ArrayList<>();
         if (batchCollection == null) return list;
 
-        try (MongoCursor<Document> cursor = batchCollection.find(Filters.eq("teacher_id", teacherId)).iterator()) {
+        try (MongoCursor<Document> cursor = batchCollection.find(
+                Filters.and(
+                    Filters.eq("teacher_id", teacherId),
+                    Filters.or(Filters.eq("status", "ACTIVE"), Filters.not(Filters.exists("status")))
+                )).iterator()) {
             while (cursor.hasNext()) {
                 Document doc = cursor.next();
                 Batch b = DocumentMapper.documentToBatch(doc);
@@ -100,12 +142,51 @@ public class BatchDAO {
         if (batchCollection == null) return false;
         try {
             Document doc = DocumentMapper.batchToDocument(batch);
-            long matched = batchCollection.replaceOne(Filters.eq("_id", batch.getBatchId()), doc).getMatchedCount();
+            // MongoDB doesn't allow changing the _id field. 
+            // Remove it from the replacement document so it uses the matched one's _id.
+            doc.remove("_id"); 
+            
+            // Use flexible filter to catch B001, B01, or 1
+            long matched = batchCollection.replaceOne(batchIdFilter(batch.getBatchId()), doc).getMatchedCount();
             return matched > 0;
         } catch (Exception e) {
+            System.err.println("[BatchDAO] Update failed for Batch ID: " + batch.getBatchId());
             e.printStackTrace();
         }
         return false;
+    }
+
+    /**
+     * Teacher conflict check — §5.
+     * Returns the conflicting batch document if found, null if no conflict.
+     *
+     * @param teacherId       teacher to check
+     * @param timeslotId      selected timeslot (e.g. "TS1")
+     * @param days            list of selected days (e.g. ["TUE","THU"])
+     * @param excludeBatchId  current batch ID to exclude from the check (pass -1 for new)
+     */
+    public Batch hasTeacherConflict(String teacherId, String timeslotId,
+                                    List<String> days, int excludeBatchId) {
+        if (batchCollection == null || teacherId == null) return null;
+        try {
+            Document query = new Document("teacher_id", teacherId)
+                .append("status", "ACTIVE")
+                .append("schedule", new Document("$elemMatch",
+                    new Document("day", new Document("$in", days))
+                        .append("timeslotId", timeslotId)));
+
+            if (excludeBatchId > 0) {
+                query.append("_id", new Document("$ne", excludeBatchId));
+            }
+
+            Document conflictDoc = batchCollection.find(query).first();
+            if (conflictDoc != null) {
+                return DocumentMapper.documentToBatch(conflictDoc);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 
     /**
@@ -159,6 +240,7 @@ public class BatchDAO {
     /**
      * @deprecated Use findByStandard() instead for exact matching.
      */
+    @Deprecated
     public List<Batch> getBatchesByCategory(String category) {
         // Delegate to findByStandard with extracted number
         String std = category;
@@ -199,7 +281,6 @@ public class BatchDAO {
             System.out.println("[BatchDAO] Filtering batches for Class: " + classNumber);
 
             // 3. Query using REGEX for flexibility (handles "Class 10-12")
-            // We search in both 'category' and 'standard' fields
             try (MongoCursor<Document> cursor = batchCollection.find(
                 Filters.and(
                     Filters.eq("status", "ACTIVE"),
@@ -221,6 +302,7 @@ public class BatchDAO {
         System.out.println("[BatchDAO] Filtered Batches Found: " + list.size());
         return list;
     }
+
     public List<Batch> getBatchesByTeacher(String teacherId) {
         return getBatchesByTeacherId(teacherId);
     }
@@ -241,7 +323,9 @@ public class BatchDAO {
 
             if (batchIds.isEmpty()) return list;
 
-            try (MongoCursor<Document> cursor = batchCollection.find(Filters.in("_id", batchIds)).iterator()) {
+            List<org.bson.conversions.Bson> idFilters = new ArrayList<>();
+            for (Integer id : batchIds) idFilters.add(batchIdFilter(id));
+            try (MongoCursor<Document> cursor = batchCollection.find(Filters.or(idFilters)).iterator()) {
                 while (cursor.hasNext()) {
                     Batch b = DocumentMapper.documentToBatch(cursor.next());
                     if (b != null) list.add(b);
@@ -251,5 +335,15 @@ public class BatchDAO {
             e.printStackTrace();
         }
         return list;
+    }
+
+    private org.bson.conversions.Bson batchIdFilter(int batchId) {
+        return Filters.or(
+            Filters.eq("_id", batchId),
+            Filters.eq("_id", String.valueOf(batchId)),
+            Filters.eq("_id", String.format("B%02d", batchId)),
+            Filters.eq("_id", String.format("B%03d", batchId)),
+            Filters.eq("_id", "B" + batchId)
+        );
     }
 }

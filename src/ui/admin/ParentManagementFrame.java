@@ -138,8 +138,8 @@ public class ParentManagementFrame extends JPanel {
         // Edit button column
         parentTable.getColumnModel().getColumn(6).setCellRenderer(new TableActionCellRender());
         parentTable.getColumnModel().getColumn(6).setCellEditor(new TableActionCellEditor(new TableActionEvent() {
-            @Override public void onEdit(int row) { openEditDialog(row); }
-            @Override public void onDelete(int row) { /* not used */ }
+            @Override public void onEdit(int row) { openParentDetailsDialog(row); }
+            @Override public void onDelete(int row) { deleteParent(row); }
         }));
         parentTable.getColumnModel().getColumn(6).setPreferredWidth(100);
 
@@ -170,7 +170,7 @@ public class ParentManagementFrame extends JPanel {
 
             // Fetch linked students
             List<Student> students = studentDAO.getStudentsByParentUserId(p.getUserId());
-            String studentDisplay = students.isEmpty() ? "No students linked" : "";
+            String studentDisplay = students.isEmpty() ? "Not Available" : "";
             for (int i = 0; i < students.size(); i++) {
                 Student s = students.get(i);
                 studentDisplay += s.getName() + " (" + s.getUserId() + ")";
@@ -185,7 +185,8 @@ public class ParentManagementFrame extends JPanel {
             String relation = p.getRelationType() != null ? p.getRelationType() : "—";
 
             tableModel.addRow(new Object[]{
-                p.getName(), studentDisplay, relation, phone, occupation, income, ""
+                safe(p.getName()), studentDisplay, safe(deriveRelation(p)), safe(phone), safe(occupation),
+                p.getAnnualIncome() > 0 ? "₹" + String.format("%,.0f", p.getAnnualIncome()) : "Not Available", ""
             });
         }
 
@@ -209,7 +210,7 @@ public class ParentManagementFrame extends JPanel {
 
             loadedParents.add(p);
             List<Student> students = studentDAO.getStudentsByParentUserId(p.getUserId());
-            String studentDisplay = students.isEmpty() ? "No students linked" : "";
+            String studentDisplay = students.isEmpty() ? "Not Available" : "";
             for (int i = 0; i < students.size(); i++) {
                 Student s = students.get(i);
                 studentDisplay += s.getName() + " (" + s.getUserId() + ")";
@@ -230,6 +231,17 @@ public class ParentManagementFrame extends JPanel {
     }
 
     // ── Edit Dialog ───────────────────────────────────────────────────────────────
+
+    private String safe(String value) {
+        return value == null || value.trim().isEmpty() || value.equalsIgnoreCase("null") || value.equals("â€”")
+            ? "Not Available" : value;
+    }
+
+    private String deriveRelation(Parent parent) {
+        String relation = parent != null ? parent.getRelationType() : null;
+        if (relation != null && !relation.trim().isEmpty()) return relation;
+        return "Guardian";
+    }
 
     private void openEditDialog(int row) {
         if (row < 0 || row >= loadedParents.size()) return;
@@ -308,15 +320,138 @@ public class ParentManagementFrame extends JPanel {
 
     // ── Helpers ───────────────────────────────────────────────────────────────────
 
-    private JPanel formRow(String label, JTextField field) {
+    private void openParentDetailsDialog(int row) {
+        if (row < 0 || row >= loadedParents.size()) return;
+        Parent p = loadedParents.get(row);
+
+        JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Edit Parent - " + p.getName(), true);
+        dialog.setSize(720, 430);
+        dialog.setLocationRelativeTo(this);
+        dialog.setLayout(new BorderLayout());
+
+        JPanel titleBar = new JPanel(new BorderLayout());
+        titleBar.setBackground(NAV_BG);
+        titleBar.setBorder(new EmptyBorder(14, 20, 14, 20));
+        JLabel titleLbl = new JLabel("Edit Parent - " + p.getName());
+        titleLbl.setFont(new Font("SansSerif", Font.BOLD, 15));
+        titleLbl.setForeground(Color.WHITE);
+        titleBar.add(titleLbl, BorderLayout.WEST);
+        dialog.add(titleBar, BorderLayout.NORTH);
+
+        JPanel form = new JPanel(new GridLayout(0, 2, 16, 8));
+        form.setBackground(CARD_BG);
+        form.setBorder(new EmptyBorder(20, 24, 12, 24));
+
+        JTextField nameField = styledField();
+        nameField.setText(p.getName() != null ? p.getName() : "");
+        JComboBox<String> relationCombo = new JComboBox<>(new String[]{"Father", "Mother", "Guardian"});
+        if (p.getRelationType() != null) relationCombo.setSelectedItem(p.getRelationType());
+        JTextField phoneField = styledField();
+        phoneField.setText(p.getPhone() != null ? p.getPhone() : "");
+        JTextField langField = styledField();
+        langField.setText(p.getPreferredLanguage() != null ? p.getPreferredLanguage() : "");
+        JTextField occField = styledField();
+        occField.setText(p.getOccupation() != null ? p.getOccupation() : "");
+        JTextField incField = styledField();
+        incField.setText(p.getAnnualIncome() > 0 ? String.valueOf((long) p.getAnnualIncome()) : "");
+        JTextField emergencyField = styledField();
+        emergencyField.setText(p.getEmergencyContact() > 0 ? String.valueOf(p.getEmergencyContact()) : "");
+
+        form.add(formRow("Name", nameField));
+        form.add(formRow("Relation Type", relationCombo));
+        form.add(formRow("Contact No.", phoneField));
+        form.add(formRow("Preferred Language", langField));
+        form.add(formRow("Occupation", occField));
+        form.add(formRow("Annual Income", incField));
+        form.add(formRow("Emergency Contact", emergencyField));
+        dialog.add(form, BorderLayout.CENTER);
+
+        JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 12));
+        btnRow.setBackground(PAGE_BG);
+        btnRow.add(makeSecondaryButton("Cancel", ev -> dialog.dispose()));
+        btnRow.add(makeAccentButton("Save Changes", ev -> {
+            String updatedName = nameField.getText().trim();
+            String phone = phoneField.getText().trim();
+            String updatedOcc = occField.getText().trim();
+            String incText = incField.getText().trim();
+            String emergency = emergencyField.getText().trim();
+
+            if (updatedName.isEmpty()) {
+                JOptionPane.showMessageDialog(dialog, "Name cannot be empty."); return;
+            }
+            if (!phone.matches("\\d{10}")) {
+                JOptionPane.showMessageDialog(dialog, "Contact number must be 10 digits."); return;
+            }
+            if (updatedOcc.isEmpty()) {
+                JOptionPane.showMessageDialog(dialog, "Occupation is required."); return;
+            }
+
+            double income;
+            try {
+                income = incText.isEmpty() ? 0 : Double.parseDouble(incText);
+                if (income <= 0) {
+                    JOptionPane.showMessageDialog(dialog, "Income must be > 0."); return;
+                }
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(dialog, "Invalid income value."); return;
+            }
+
+            long emergencyContact;
+            try {
+                emergencyContact = emergency.isEmpty() ? Long.parseLong(phone) : Long.parseLong(emergency);
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(dialog, "Invalid emergency contact."); return;
+            }
+
+            p.setName(updatedName);
+            p.setPhone(phone);
+            p.setRelationType(relationCombo.getSelectedItem().toString());
+            p.setPreferredLanguage(langField.getText().trim());
+            p.setOccupation(updatedOcc);
+            p.setAnnualIncome(income);
+            p.setEmergencyContact(emergencyContact);
+
+            if (new ParentDAO().updateParent(p)) {
+                JOptionPane.showMessageDialog(dialog, "Parent updated successfully!");
+                refreshTable();
+                dialog.dispose();
+            } else {
+                JOptionPane.showMessageDialog(dialog, "Failed to update parent.");
+            }
+        }));
+        dialog.add(btnRow, BorderLayout.SOUTH);
+        dialog.setVisible(true);
+    }
+
+    private void deleteParent(int row) {
+        if (row < 0 || row >= loadedParents.size()) return;
+        if (parentTable.isEditing()) parentTable.getCellEditor().stopCellEditing();
+
+        Parent p = loadedParents.get(row);
+        int ok = JOptionPane.showConfirmDialog(this,
+            "Delete parent details for " + p.getName() + "?\nLinked student records will have their embedded parent details removed.",
+            "Confirm Delete", JOptionPane.YES_NO_OPTION);
+        if (ok != JOptionPane.YES_OPTION) return;
+
+        if (new ParentDAO().deleteParent(p.getUserId())) {
+            JOptionPane.showMessageDialog(this, "Parent deleted successfully.");
+            refreshTable();
+        } else {
+            JOptionPane.showMessageDialog(this, "Failed to delete parent.");
+        }
+    }
+
+    private JPanel formRow(String label, JComponent field) {
         JPanel p = new JPanel(new BorderLayout(0, 4));
         p.setBackground(CARD_BG);
         JLabel lbl = new JLabel(label);
         lbl.setFont(new Font("SansSerif", Font.BOLD, 11));
         lbl.setForeground(TEXT_SEC);
-        field.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(new Color(200, 210, 225), 1, true),
-            new EmptyBorder(6, 10, 6, 10)));
+        if (field instanceof JTextField) {
+            field.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(200, 210, 225), 1, true),
+                new EmptyBorder(6, 10, 6, 10)));
+        }
         p.add(lbl, BorderLayout.NORTH);
         p.add(field, BorderLayout.CENTER);
         return p;

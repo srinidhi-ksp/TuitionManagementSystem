@@ -6,8 +6,8 @@ import com.mongodb.client.MongoDatabase;
 
 public class DBConnection {
 
-    private static final String CONNECTION_STRING = "mongodb://localhost:27017";
-    private static final String DATABASE_NAME = "tuitionManagementSystem";
+    private static final String CONNECTION_STRING = "mongodb://127.0.0.1:27017/";
+    private static final String DATABASE_NAME = "tuitionManagementDB";
     
     private static MongoClient mongoClient = null;
 

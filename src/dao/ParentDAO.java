@@ -1,33 +1,41 @@
 package dao;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.bson.Document;
+import org.bson.conversions.Bson;
 
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.Updates;
 
 import db.DBConnection;
 import db.DocumentMapper;
 import model.Parent;
 
 /**
- * Parent DAO - Handles all parent-related database operations
+ * Parent DAO - reads parent records from both the legacy parents collection and
+ * embedded students.parent documents.
  */
 public class ParentDAO {
 
-    private MongoCollection<Document> parentCollection;
+// parentCollection removed as per requirement
+    private MongoCollection<Document> studentCollection;
+    private MongoCollection<Document> userCollection;
 
     public ParentDAO() {
         try {
             MongoDatabase database = DBConnection.getDatabase();
             if (database != null) {
-                parentCollection = database.getCollection("parents");
-                System.out.println("[ParentDAO] ✅ Connected to 'parents' collection");
+                studentCollection = database.getCollection("students");
+                userCollection = database.getCollection("users");
+                System.out.println("[ParentDAO] Connected to student/user collections");
             } else {
-                System.err.println("[ParentDAO] ❌ Database connection failed!");
+                System.err.println("[ParentDAO] Database connection failed!");
             }
         } catch (Exception e) {
             System.err.println("[ParentDAO] Error initializing: " + e.getMessage());
@@ -35,173 +43,245 @@ public class ParentDAO {
         }
     }
 
-    /**
-     * Fetch parent by user_id with Email and Phone from users collection
-     */
     public Parent getByUserId(String userId) {
-        if (parentCollection == null) return null;
+        if (userId == null) return null;
         try {
-            Document doc = parentCollection.find(Filters.eq("user_id", userId)).first();
-            if (doc == null) {
-                doc = parentCollection.find(Filters.eq("_id", userId)).first();
-            }
-            if (doc == null) return null;
+            Document studentDoc = findStudentByParentIdentifier(userId);
+            if (studentDoc == null) return null;
 
-            Parent p = DocumentMapper.documentToParent(doc);
+            Document parentDoc = studentDoc.get("parent", Document.class);
+            if (parentDoc == null) return null;
 
-            // ✅ JOIN WITH USERS COLLECTION FOR EMAIL & PHONE
-            MongoDatabase db = DBConnection.getDatabase();
-            Document userDoc = db.getCollection("users").find(Filters.eq("_id", userId)).first();
-            if (userDoc != null) {
-                p.setEmail(userDoc.getString("email"));
-                
-                String phone = userDoc.getString("phone");
-                if (phone == null || phone.isBlank()) {
-                    List<String> phones = userDoc.getList("phones", String.class);
-                    if (phones != null && !phones.isEmpty()) phone = phones.get(0);
-                }
-                p.setPhone(phone);
-            }
-
-            return p;
+            Parent parent = DocumentMapper.documentToParent(parentDoc);
+            addLinkedStudent(parent, studentDoc);
+            return enrichFromUser(parent, userId);
         } catch (Exception e) {
             System.err.println("[ParentDAO] Error fetching parent by user_id: " + e.getMessage());
             return null;
         }
     }
 
-    /**
-     * Get parent by email
-     */
     public Parent getByEmail(String email) {
-        if (parentCollection == null) return null;
+        if (email == null) return null;
         try {
-            Document doc = parentCollection.find(Filters.eq("email", email)).first();
-            return DocumentMapper.documentToParent(doc);
+            Document userDoc = userCollection != null ? userCollection.find(Filters.eq("email", email)).first() : null;
+            if (userDoc != null) {
+                Parent byUser = getByUserId(stringValue(userDoc.get("_id")));
+                if (byUser != null) return byUser;
+            }
+
+            return null;
         } catch (Exception e) {
             System.err.println("[ParentDAO] Error fetching parent by email: " + e.getMessage());
             return null;
         }
     }
 
-    /**
-     * Add a new parent record
-     */
     public boolean addParent(Parent p) {
-        if (parentCollection == null) return false;
-        try {
-            Document doc = DocumentMapper.parentToDocument(p);
-            parentCollection.insertOne(doc);
-            return true;
-        } catch (Exception e) {
-            System.err.println("[ParentDAO] Error adding parent: " + e.getMessage());
-            return false;
-        }
+        // We do not insert into a separate parents collection anymore.
+        // Parents are added by embedding them in student documents.
+        return true;
     }
 
     public List<Parent> getAllParents() {
-        List<Parent> list = new ArrayList<>();
-        if (parentCollection == null) return list;
-        try {
-            for (Document doc : parentCollection.find()) {
-                list.add(DocumentMapper.documentToParent(doc));
-            }
-        } catch (Exception e) {
-            System.err.println("[ParentDAO] Error fetching all parents: " + e.getMessage());
-        }
-        return list;
+        return getAllParentsWithPhone();
     }
 
-    /**
-     * Get all parents with phone numbers cross-referenced from users collection.
-     * Phone is stored in users.phones[] array, linked via parents.user_id = users._id
-     */
     public List<Parent> getAllParentsWithPhone() {
-        List<Parent> list = new ArrayList<>();
-        if (parentCollection == null) return list;
+        Map<String, Parent> parentsById = new LinkedHashMap<>();
+
         try {
-            MongoDatabase db = DBConnection.getDatabase();
-            MongoCollection<Document> usersCollection = db.getCollection("users");
+            if (studentCollection != null) {
+                for (Document studentDoc : studentCollection.find(Filters.exists("parent"))) {
+                    Document parentDoc = studentDoc.get("parent", Document.class);
+                    if (parentDoc == null) continue;
 
-            for (Document doc : parentCollection.find()) {
-                Parent p = DocumentMapper.documentToParent(doc);
-                if (p == null) continue;
+                    Parent embedded = DocumentMapper.documentToParent(parentDoc);
+                    if (embedded == null || embedded.getUserId() == null) continue;
 
-                // Step 1: Get phone from users collection via user_id
-                Object userIdObj = doc.get("user_id");
-                String userId = userIdObj != null ? userIdObj.toString() : null;
-                String phone = "—";
-
-                if (userId != null) {
-                    Document userDoc = usersCollection.find(
-                        Filters.eq("_id", userId)
-                    ).first();
-
-                    if (userDoc != null) {
-                        // Check 'phone' field (string)
-                        phone = userDoc.getString("phone");
-                        
-                        // Fallback to 'phones' array (list)
-                        if (phone == null || phone.isBlank()) {
-                            java.util.List<String> phones = userDoc.getList("phones", String.class);
-                            if (phones != null && !phones.isEmpty()) {
-                                phone = phones.get(0);
-                            }
-                        }
-                    }
+                    Parent existing = parentsById.get(embedded.getUserId());
+                    Parent target = existing != null ? mergeParent(existing, embedded) : embedded;
+                    addLinkedStudent(target, studentDoc);
+                    parentsById.put(target.getUserId(), enrichFromMatchingUser(target));
                 }
-
-                // Step 2: Fallback — search students collection for embedded parent phone
-                if ("—".equals(phone) || phone == null) {
-                    MongoCollection<Document> studentsCol = db.getCollection("students");
-                    Document studentDoc = studentsCol.find(
-                        Filters.or(
-                            Filters.eq("parent_user_id", userId),
-                            Filters.eq("parent.user_id", userId)
-                        )
-                    ).first();
-                    if (studentDoc != null) {
-                        Document parentSub = studentDoc.get("parent", Document.class);
-                        if (parentSub != null) {
-                            String fallbackPhone = parentSub.getString("phone");
-                            if (fallbackPhone != null && !fallbackPhone.isBlank()) {
-                                phone = fallbackPhone;
-                            }
-                        }
-                    }
-                }
-
-                // Step 3: Set phone on Parent object
-                p.setPhone(phone); 
-
-                list.add(p);
             }
         } catch (Exception e) {
             System.err.println("[ParentDAO] Error in getAllParentsWithPhone: " + e.getMessage());
             e.printStackTrace();
         }
-        return list;
+
+        return new ArrayList<>(parentsById.values());
     }
 
-    /**
-     * Update parent name, occupation, and annual_income.
-     */
     public boolean updateParent(Parent p) {
-        if (parentCollection == null) return false;
+        if (p == null || p.getUserId() == null) return false;
         try {
-            org.bson.conversions.Bson filter = com.mongodb.client.model.Filters.eq("user_id", p.getUserId());
-            Document update = new Document("$set", new Document()
-                .append("name", p.getName())
-                .append("occupation", p.getOccupation())
-                .append("annual_income", p.getAnnualIncome())
-                .append("updated_at", new java.util.Date()));
-            long modified = parentCollection.updateOne(filter, update).getModifiedCount();
-            System.out.println("[ParentDAO] updateParent modified=" + modified);
-            return modified >= 0; // even 0 is OK if nothing changed
+            boolean updated = false;
+
+            if (studentCollection != null) {
+                long modified = studentCollection.updateMany(
+                    parentIdentifierFilter(p.getUserId()),
+                    Updates.combine(
+                        Updates.set("parent.full_name", p.getName()),
+                        Updates.set("parent.phone", p.getPhone()),
+                        Updates.set("parent.preferred_language", p.getPreferredLanguage()),
+                        Updates.set("parent.occupation", p.getOccupation()),
+                        Updates.set("parent.salary", p.getAnnualIncome()),
+                        Updates.set("parent.annual_income", p.getAnnualIncome()),
+                        Updates.set("parent.emergency_contact", p.getEmergencyContact()),
+                        Updates.set("parent.relation", p.getRelationType())
+                    )
+                ).getModifiedCount();
+                updated = updated || modified > 0;
+            }
+
+            if (userCollection != null) {
+                long modified = userCollection.updateOne(
+                    Filters.eq("_id", p.getUserId()),
+                    Updates.combine(
+                        Updates.set("phone", p.getPhone()),
+                        Updates.set("phones", java.util.Collections.singletonList(p.getPhone()))
+                    )
+                ).getModifiedCount();
+                updated = updated || modified > 0;
+            }
+
+            return updated;
         } catch (Exception e) {
             System.err.println("[ParentDAO] Error updating parent: " + e.getMessage());
             return false;
         }
     }
-}
 
+    public boolean deleteParent(String parentId) {
+        if (parentId == null) return false;
+        try {
+            boolean deleted = false;
+
+            if (studentCollection != null) {
+                long count = studentCollection.updateMany(
+                    parentIdentifierFilter(parentId),
+                    Updates.unset("parent")
+                ).getModifiedCount();
+                deleted = deleted || count > 0;
+            }
+
+            if (userCollection != null) {
+                long count = userCollection.deleteMany(Filters.eq("_id", parentId)).getDeletedCount();
+                deleted = deleted || count > 0;
+            }
+
+            return deleted;
+        } catch (Exception e) {
+            System.err.println("[ParentDAO] Error deleting parent: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private Document findStudentByParentIdentifier(String identifier) {
+        if (studentCollection == null) return null;
+
+        List<Bson> filters = new ArrayList<>();
+        filters.add(Filters.eq("parent_user_id", identifier));
+        filters.add(Filters.eq("parent.user_id", identifier));
+        filters.add(Filters.eq("parent.parent_id", identifier));
+        filters.add(Filters.eq("parent.email", identifier));
+
+        Document userDoc = findUser(identifier);
+        if (userDoc != null) {
+            String email = userDoc.getString("email");
+            if (email != null) filters.add(Filters.eq("parent.email", email));
+
+            String phone = userDoc.getString("phone");
+            if (phone != null) filters.add(Filters.eq("parent.phone", phone));
+
+            List<String> phones = userDoc.getList("phones", String.class);
+            if (phones != null) {
+                for (String p : phones) {
+                    if (p != null) filters.add(Filters.eq("parent.phone", p));
+                }
+            }
+        }
+
+        return studentCollection.find(Filters.or(filters)).first();
+    }
+
+    private Bson parentIdentifierFilter(String identifier) {
+        return Filters.or(
+            Filters.eq("parent.user_id", identifier),
+            Filters.eq("parent.parent_id", identifier),
+            Filters.eq("parent.email", identifier),
+            Filters.eq("parent.phone", identifier)
+        );
+    }
+
+    private Parent enrichFromMatchingUser(Parent parent) {
+        if (parent == null || userCollection == null) return parent;
+
+        Document userDoc = null;
+        if (parent.getEmail() != null) {
+            userDoc = userCollection.find(Filters.eq("email", parent.getEmail())).first();
+        }
+        if (userDoc == null && parent.getPhone() != null) {
+            userDoc = userCollection.find(Filters.or(
+                Filters.eq("phone", parent.getPhone()),
+                Filters.eq("phones", parent.getPhone())
+            )).first();
+        }
+
+        applyUserFields(parent, userDoc);
+        return parent;
+    }
+
+    private Parent enrichFromUser(Parent parent, String loginIdentifier) {
+        applyUserFields(parent, findUser(loginIdentifier));
+        if (parent.getEmail() == null || parent.getPhone() == null) {
+            enrichFromMatchingUser(parent);
+        }
+        return parent;
+    }
+
+    private Document findUser(String identifier) {
+        if (userCollection == null || identifier == null) return null;
+        return userCollection.find(Filters.or(
+            Filters.eq("_id", identifier),
+            Filters.eq("email", identifier)
+        )).first();
+    }
+
+    private void applyUserFields(Parent parent, Document userDoc) {
+        if (parent == null || userDoc == null) return;
+        if (parent.getEmail() == null) parent.setEmail(userDoc.getString("email"));
+
+        String phone = userDoc.getString("phone");
+        if (phone == null || phone.isBlank()) {
+            List<String> phones = userDoc.getList("phones", String.class);
+            if (phones != null && !phones.isEmpty()) phone = phones.get(0);
+        }
+        if (parent.getPhone() == null || parent.getPhone().isBlank()) parent.setPhone(phone);
+    }
+
+    private Parent mergeParent(Parent primary, Parent fallback) {
+        if (primary.getName() == null) primary.setName(fallback.getName());
+        if (primary.getPhone() == null) primary.setPhone(fallback.getPhone());
+        if (primary.getOccupation() == null) primary.setOccupation(fallback.getOccupation());
+        if (primary.getRelationType() == null) primary.setRelationType(fallback.getRelationType());
+        if (primary.getAnnualIncome() == 0) primary.setAnnualIncome(fallback.getAnnualIncome());
+        if (primary.getPreferredLanguage() == null) primary.setPreferredLanguage(fallback.getPreferredLanguage());
+        if (primary.getEmergencyContact() == 0) primary.setEmergencyContact(fallback.getEmergencyContact());
+        return primary;
+    }
+
+    private void addLinkedStudent(Parent parent, Document studentDoc) {
+        if (parent == null || studentDoc == null) return;
+        if (parent.getLinkedStudentIds() == null) parent.setLinkedStudentIds(new ArrayList<>());
+        String studentId = stringValue(studentDoc.get("_id"));
+        if (studentId != null && !parent.getLinkedStudentIds().contains(studentId)) {
+            parent.getLinkedStudentIds().add(studentId);
+        }
+    }
+
+    private static String stringValue(Object value) {
+        return value != null ? value.toString() : null;
+    }
+}

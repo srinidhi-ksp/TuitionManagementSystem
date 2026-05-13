@@ -263,7 +263,7 @@ public class StudentDAO {
         List<Student> studentList = new ArrayList<>();
         if (studentCollection == null || parentUserId == null) return studentList;
 
-        try (MongoCursor<Document> cursor = studentCollection.find(Filters.eq("parent_user_id", parentUserId)).iterator()) {
+        try (MongoCursor<Document> cursor = studentCollection.find(buildParentLookupFilter(parentUserId)).iterator()) {
             while (cursor.hasNext()) {
                 Document doc = cursor.next();
                 Student s = DocumentMapper.documentToStudent(doc);
@@ -278,6 +278,67 @@ public class StudentDAO {
     // ══════════════════════════════════════════════════
     // NEW: Active/Inactive detection via enrollments
     // ══════════════════════════════════════════════════
+
+    private Bson buildParentLookupFilter(String parentIdentifier) {
+        java.util.LinkedHashSet<String> ids = new java.util.LinkedHashSet<>();
+        java.util.LinkedHashSet<String> phones = new java.util.LinkedHashSet<>();
+        java.util.LinkedHashSet<String> emails = new java.util.LinkedHashSet<>();
+
+        addIfPresent(ids, parentIdentifier);
+
+        MongoDatabase db = DBConnection.getDatabase();
+        if (db != null) {
+            MongoCollection<Document> users = db.getCollection("users");
+            Document userDoc = users.find(Filters.or(
+                Filters.eq("_id", parentIdentifier),
+                Filters.eq("email", parentIdentifier)
+            )).first();
+
+            if (userDoc != null) {
+                addIfPresent(ids, stringValue(userDoc.get("_id")));
+                addIfPresent(emails, userDoc.getString("email"));
+                addIfPresent(phones, userDoc.getString("phone"));
+                List<String> userPhones = userDoc.getList("phones", String.class);
+                if (userPhones != null) {
+                    for (String phone : userPhones) addIfPresent(phones, phone);
+                }
+            }
+
+            MongoCollection<Document> parents = db.getCollection("parents");
+            java.util.List<Bson> parentFilters = new java.util.ArrayList<>();
+            parentFilters.add(Filters.eq("user_id", parentIdentifier));
+            parentFilters.add(Filters.eq("_id", parentIdentifier));
+            parentFilters.add(Filters.eq("email", parentIdentifier));
+            for (String phone : phones) parentFilters.add(Filters.eq("phone", phone));
+
+            Document parentDoc = parents.find(Filters.or(parentFilters)).first();
+            if (parentDoc != null) {
+                addIfPresent(ids, parentDoc.getString("user_id"));
+                addIfPresent(ids, stringValue(parentDoc.get("_id")));
+                addIfPresent(emails, parentDoc.getString("email"));
+                addIfPresent(phones, parentDoc.getString("phone"));
+            }
+        }
+
+        java.util.List<Bson> filters = new java.util.ArrayList<>();
+        for (String id : ids) {
+            filters.add(Filters.eq("parent_user_id", id));
+            filters.add(Filters.eq("parent.user_id", id));
+            filters.add(Filters.eq("parent.parent_id", id));
+        }
+        for (String phone : phones) filters.add(Filters.eq("parent.phone", phone));
+        for (String email : emails) filters.add(Filters.eq("parent.email", email));
+
+        return filters.isEmpty() ? Filters.eq("parent_user_id", parentIdentifier) : Filters.or(filters);
+    }
+
+    private static void addIfPresent(java.util.Set<String> values, String value) {
+        if (value != null && !value.isBlank()) values.add(value.trim());
+    }
+
+    private static String stringValue(Object value) {
+        return value != null ? value.toString() : null;
+    }
 
     /**
      * Returns distinct student IDs that have at least one ACTIVE enrollment.

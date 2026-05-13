@@ -66,7 +66,7 @@ public class EnrollmentManagementFrame extends JPanel {
     private DefaultTableModel activeModel, completedModel, cancelledModel;
     private List<Enrollment> activeEnrollments, completedEnrollments, cancelledEnrollments;
 
-    private static final SimpleDateFormat DATE_FMT = new SimpleDateFormat("dd-MM-yyyy");
+    private static final SimpleDateFormat DATE_FMT = new SimpleDateFormat("dd-MM-yyyy hh:mm a");
 
     public EnrollmentManagementFrame() {
         setLayout(new BorderLayout());
@@ -252,7 +252,11 @@ public class EnrollmentManagementFrame extends JPanel {
             String stuId = (stu != null) ? stu.getUserId() : rawId;
 
             Batch bat = bDao.getBatchById(e.getBatchId());
-            String batchName = bat != null ? bat.getBatchName() : "Batch #" + e.getBatchId();
+            String batchIdStr = String.format("B%03d", e.getBatchId());
+            String displayId = (bat != null && bat.getBatchName() != null) ? batchIdStr : batchIdStr;
+            String batchName = (bat != null) 
+                ? (displayId + " - " + bat.getBatchName()) 
+                : "Batch #" + displayId;
             String dateStr   = e.getEnrollmentDate() != null ? DATE_FMT.format(e.getEnrollmentDate()) : "--";
             String st        = e.getStatus() != null ? e.getStatus() : status;
 
